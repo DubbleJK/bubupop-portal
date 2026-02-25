@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -16,7 +16,7 @@ interface BlogOutput {
   hashtags: string[];
 }
 
-export default function BlogPage() {
+function BlogPageContent() {
   const searchParams = useSearchParams();
   const [mainKeyword, setMainKeyword] = useState("");
   const [sub1, setSub1] = useState("");
@@ -318,5 +318,13 @@ export default function BlogPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function BlogPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-100 flex items-center justify-center text-slate-500">로딩 중...</div>}>
+      <BlogPageContent />
+    </Suspense>
   );
 }
