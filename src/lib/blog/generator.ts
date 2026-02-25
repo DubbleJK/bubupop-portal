@@ -135,7 +135,7 @@ export function generateBlogPost(input: BlogInput): BlogOutput {
     "실사출력",
     "견적문의",
   ];
-  const hashtags = [...new Set([...baseTags, ...extraTags])].slice(0, 10);
+  const hashtags = Array.from(new Set([...baseTags, ...extraTags])).slice(0, 10);
 
   return { titleCandidates, body, hashtags };
 }
