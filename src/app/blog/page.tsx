@@ -22,12 +22,12 @@ export default function BlogPage() {
   const [sub1, setSub1] = useState("");
   const [sub2, setSub2] = useState("");
   const [sub3, setSub3] = useState("");
-  const [industryId, setIndustryId] = useState(INDUSTRY_OPTIONS[0].id);
+  const [industryId, setIndustryId] = useState<string>(INDUSTRY_OPTIONS[0].id);
   const [strengths, setStrengths] = useState<string[]>([]);
   const [region, setRegion] = useState("");
   const [target, setTarget] = useState("");
   const [length, setLength] = useState<1000 | 1500 | 2000>(1500);
-  const [toneId, setToneId] = useState(TONE_OPTIONS[0].id);
+  const [toneId, setToneId] = useState<string>(TONE_OPTIONS[0].id);
   const [result, setResult] = useState<BlogOutput | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -157,7 +157,7 @@ export default function BlogPage() {
                 <span className="text-xs text-slate-500">업종 템플릿</span>
                 <select
                   value={industryId}
-                  onChange={(e) => setIndustryId(e.target.value as (typeof INDUSTRY_OPTIONS)[number]["id"])}
+                  onChange={(e) => setIndustryId(e.target.value)}
                   className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
                 >
                   {INDUSTRY_OPTIONS.map((o) => (
