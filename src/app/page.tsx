@@ -56,15 +56,13 @@ export default function DashboardPage() {
 
       <div className="w-full max-w-md space-y-4">
         <Link
-          href={`${quotationAppUrl}`}
-          target="_blank"
-          rel="noopener noreferrer"
+          href={quotationAppUrl}
           className={cardClass}
         >
           <IconCalculator className={iconClass} />
           <div>
             <span className="text-lg font-semibold text-slate-800">견적 계산기</span>
-            <p className="text-sm text-slate-500 mt-1">인쇄 견적 · 주문 (POP, 스티커, DTF, 명함, 배너 등)</p>
+            <p className="text-sm text-slate-500 mt-1">인쇄 견적 · 주문</p>
           </div>
         </Link>
 
