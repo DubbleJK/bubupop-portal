@@ -1,0 +1,16 @@
+# bubucalculate-app (포털) 커밋 후 푸시
+
+# 1) 포털 폴더로 이동 (전체 경로 사용)
+cd C:\Users\USER\bubucalculate-app
+
+# 2) 변경 사항 확인 (선택)
+git status
+
+# 3) 변경 파일 스테이징 (전체 올리려면 아래 한 줄)
+git add .
+
+# 4) 커밋 (메시지는 수정해서 사용)
+git commit -m "포털 업데이트"
+
+# 5) GitHub 푸시 (Vercel 자동 배포)
+git push origin main
