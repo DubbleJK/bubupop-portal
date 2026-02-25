@@ -157,7 +157,7 @@ export default function BlogPage() {
                 <span className="text-xs text-slate-500">업종 템플릿</span>
                 <select
                   value={industryId}
-                  onChange={(e) => setIndustryId(e.target.value)}
+                  onChange={(e) => setIndustryId(e.target.value as (typeof INDUSTRY_OPTIONS)[number]["id"])}
                   className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
                 >
                   {INDUSTRY_OPTIONS.map((o) => (
