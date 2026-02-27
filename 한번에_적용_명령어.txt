@@ -1,0 +1,15 @@
+# 오늘 수정 한 번에 적용 (순서대로 실행)
+
+# ========== 1) 견적 계산기 ==========
+cd C:\Users\USER\quotation-app
+git add .
+git commit -m "기본값 수정(PIN 5683, 간격 5mm, 스티커 단가, 명함 베이직 8000) + /admin PIN 요구 + HOME 등"
+git push origin main
+
+# ========== 2) 포털 ==========
+cd C:\Users\USER\bubucalculate-app
+git add .
+git commit -m "북마크 아이콘 logo.png, 견적 같은 창 이동, 키워드/블로그 HOME 버튼"
+git push origin main
+
+# 끝. Vercel Deployments에서 각각 배포 완료 확인.

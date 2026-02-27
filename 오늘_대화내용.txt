@@ -1,0 +1,57 @@
+========================================
+오늘 대화 내용 요약 (2025-02-25)
+========================================
+
+[1] 포털(Vercel) 빌드 실패 수정
+--------------------------------------
+- 문제: Deployment failed, Type error 등
+- 수정한 것:
+  • blog/page.tsx: industryId, toneId를 useState<string>(...)으로 변경 (setIndustryId(e.target.value) 타입 오류 해결)
+  • generator.ts: [...new Set(...)] → Array.from(new Set(...)) (downlevelIteration 오류 해결)
+  • blog/page.tsx: useSearchParams() 사용 부분을 BlogPageContent로 분리하고, default export에서 <Suspense><BlogPageContent /></Suspense>로 감싸서 prerender 오류 해결
+- 포털 푸시: cd C:\Users\USER\bubucalculate-app 후 git add / commit / push origin main
+
+[2] Vercel에 업데이트가 안 되는 경우
+--------------------------------------
+- 원인: quotation-app과 bubucalculate-app이 서로 다른 Git 저장소·다른 Vercel 프로젝트임. 푸시할 때 해당 앱 폴더에서 해야 함.
+- 견적 앱: cd C:\Users\USER\quotation-app 후 푸시 (DubbleJK/bubupop-quotation)
+- 포털: cd C:\Users\USER\bubucalculate-app 후 푸시 (DubbleJK/bubupop-portal)
+- 푸시_명령어.txt 에 포털용 명령어 정리해 둠.
+
+[3] 견적 계산기 – HOME 버튼 및 포털 링크
+--------------------------------------
+- 문제: HOME 누르면 Vercel 로그인 화면으로 감.
+- 수정: quotation-app/src/lib/portalUrl.ts 에서 프로덕션 기본 URL을 https://bubupop-portal.vercel.app 로 변경 (기존 git-main-... 주소 제거).
+- 포털 쪽: 키워드 검색량·블로그 글 생성 페이지에서 "← 포털로"를 견적 앱과 같은 HOME 캡슐 버튼으로 변경, href="/" 로 메인 포털로 이동.
+- 견적 앱: 제품명 괄호 설명 제거 (스티커 (시트형 A4/A3) → 스티커 시트, 스티커 (솔벤트 롤) → 스티커 솔벤트) – 모바일 줄바꿈 방지.
+
+[4] bubucalculate-app 커밋·푸시 정리
+--------------------------------------
+- 푸시_명령어.txt 에 포털 커밋 후 푸시 순서 남김 (cd → git add . → git commit → git push origin main).
+
+[5] 키워드 검색 – .env.local 내용이 없다고 나오는 경우
+--------------------------------------
+- 로컬에는 .env.local 에 키가 있지만, Vercel 배포 사이트는 그 파일을 못 봄.
+- 해결: Vercel 대시보드 → bubupop-portal 프로젝트 → Settings → Environment Variables 에서 로컬과 같은 변수명·값 추가 (OPENAI_API_KEY, NAVER_... 등) 후 Redeploy.
+- env_설정_가이드.md: 각 키 발급처·설명. Vercel_환경변수_설정.md: Vercel에 env 넣는 단계 정리.
+
+[6] Vercel에 키/패스워드 넣는 것 보안
+--------------------------------------
+- Vercel Environment Variables 에 넣는 것은 일반적인 방식이며, 암호화 저장·저장소에 안 올라감·클라이언트에 노출 안 됨. .env.local 은 Git에 커밋하지 말 것.
+
+[7] 북마크/탭 아이콘을 logo.png 로 변경
+--------------------------------------
+- layout.tsx metadata 에 icons: { icon: "/logo.png", apple: "/logo.png" } 추가. public/logo.png 가 탭·북마크 아이콘으로 사용됨.
+
+[8] 견적 계산기 링크·포털 메인 문구 수정
+--------------------------------------
+- 견적 계산기: 새 탭(target="_blank") 대신 같은 창에서 이동하도록 target·rel 제거.
+- 포털 메인: "인쇄 견적 · 주문 (POP, 스티커, DTF, 명함, 배너 등)" → "인쇄 견적 · 주문" 으로 괄호 안 내용만 삭제.
+
+[9] 적용 방법 정리
+--------------------------------------
+- 적용_방법.md 생성: 포털(bubucalculate-app) / 견적 앱(quotation-app) 각각 cd → git add . → commit → push 순서, 환경 변수만 바꾼 경우 Vercel Redeploy 안내.
+
+========================================
+끝
+========================================
