@@ -1,0 +1,18 @@
+# 발주서 발행기 (purchase-order-app) 커밋 후 푸시
+
+# 1) 발주서 앱 폴더로 이동
+cd C:\Users\USER\purchase-order-app
+
+# 2) 변경 사항 확인 (선택)
+git status
+
+# 3) 변경 파일 스테이징
+git add .
+
+# 4) 커밋 (메시지는 수정해서 사용)
+git commit -m "발주서 발행기 업데이트"
+
+# 5) GitHub 푸시 (Vercel 자동 배포)
+git push origin main
+
+# ※ 처음 한 번만: Git 저장소가 없다면 적용_방법.md 의 "발주서 발행기 처음 배포하기" 참고.

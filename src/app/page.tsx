@@ -30,12 +30,31 @@ function IconPenNotebook({ className }: { className?: string }) {
   );
 }
 
+/** 발주서/문서 아이콘 */
+function IconOrderDoc({ className }: { className?: string }) {
+  return (
+    <svg className={className} xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6" />
+      <path d="M16 13H8" />
+      <path d="M16 17H8" />
+      <path d="M10 9H8" />
+    </svg>
+  );
+}
+
 export default function DashboardPage() {
   const quotationAppUrl =
     typeof process.env.NEXT_PUBLIC_QUOTATION_APP_URL === "string" &&
     process.env.NEXT_PUBLIC_QUOTATION_APP_URL !== ""
       ? process.env.NEXT_PUBLIC_QUOTATION_APP_URL
       : "http://localhost:3000";
+
+  const orderAppUrl =
+    typeof process.env.NEXT_PUBLIC_ORDER_APP_URL === "string" &&
+    process.env.NEXT_PUBLIC_ORDER_APP_URL !== ""
+      ? process.env.NEXT_PUBLIC_ORDER_APP_URL
+      : "https://bubupop-order.vercel.app";
 
   const cardClass = "flex items-start gap-4 w-full bg-white border-2 border-slate-200 rounded-xl p-5 text-left hover:border-blue-400 hover:bg-blue-50/50 transition";
   const iconClass = "w-10 h-10 shrink-0 text-slate-500 p-2 rounded-lg bg-slate-100";
@@ -63,6 +82,14 @@ export default function DashboardPage() {
           <div>
             <span className="text-lg font-semibold text-slate-800">견적 계산기</span>
             <p className="text-sm text-slate-500 mt-1">인쇄 견적 · 주문</p>
+          </div>
+        </Link>
+
+        <Link href={orderAppUrl} className={cardClass} target="_blank" rel="noopener noreferrer">
+          <IconOrderDoc className={iconClass} />
+          <div>
+            <span className="text-lg font-semibold text-slate-800">발주서 발행기</span>
+            <p className="text-sm text-slate-500 mt-1">POP, 스티커, DTF 등 발주서 작성 · PDF 저장</p>
           </div>
         </Link>
 
