@@ -14,6 +14,7 @@ export interface GenerateBody {
   mainKeyword: string;
   subKeywords: string[];
   industryId: string;
+  industryCustom?: string;
   strengths: string[];
   region: string;
   target: string;
@@ -54,6 +55,7 @@ export async function POST(request: Request) {
     mainKeyword,
     subKeywords,
     industryId,
+    industryCustom,
     strengths,
     region,
     target,
@@ -65,7 +67,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "메인 키워드를 입력해 주세요." }, { status: 400 });
   }
 
-  const industryLabel = getIndustryLabel(industryId);
+  const industryLabel = (industryCustom?.trim() || getIndustryLabel(industryId));
   const strengthLabels = getStrengthLabels(strengths);
   const toneLabel = getToneLabel(toneId);
 
@@ -86,6 +88,18 @@ export async function POST(request: Request) {
 - 사진 자리: 📸 앞뒤 문장에는 키워드나 핵심 정보를 넣어, 이미지와 함께 검색·이해에 도움이 되게 할 것.
 - CTA 배치: 문의 유도(연락해 주세요 등)는 마지막 1~2문단에만 두고, 앞부분은 정보 제공에 집중할 것.
 
+[글 길이 - 반드시 준수]
+- 본문 body는 한글 기준으로 선택한 글 길이(1000자 / 1500자 / 2000자)를 반드시 충족해야 합니다. 목표 글자 수 미만이면 안 됩니다. 목표보다 약간 길게 써도 됩니다.
+- 1000자 선택 시: 본문이 1000자 이상이어야 함. 960~980자처럼 짧으면 부적격.
+- 1500자 선택 시: 본문이 1500자 이상이어야 함.
+- 2000자 선택 시: 본문이 2000자 이상이어야 함.
+
+[문체·구성 다양화 - 매번 다르게]
+- 매번 다른 문체와 진행 방향으로 작성하세요. 같은 형식을 반복하지 마세요.
+- 서론: 때로는 질문으로, 때로는 경험담·사실 제시, 때로는 고객 목소리 인용 등 다양한 방식으로 시작할 것.
+- 문단 순서·강조하는 부분·비유나 예시 사용 여부를 바꿔 가며 작성할 것.
+- 문장 길이와 호칭도 가볍게 변형해, 검색 요건은 유지하면서 읽는 느낌이 매번 달라지게 할 것.
+
 응답은 반드시 다음 JSON 형식만 출력하세요. 다른 설명이나 마크다운 없이 JSON만 출력합니다.
 {
   "titleCandidates": ["제목1", "제목2", "제목3", "제목4", "제목5"],
@@ -101,10 +115,10 @@ export async function POST(request: Request) {
 - 강조할 강점: ${strengthLabels.length ? strengthLabels.join(", ") : "(없음)"}
 - 지역(제목·본문·해시태그에 활용): ${region || "(지역 없음)"}
 - 타겟: ${target || "(타겟 없음)"}
-- 글 길이: 약 ${length}자
+- 글 길이: 본문 body는 한글 기준 반드시 ${length}자 이상으로 작성. ${length}자 미만이면 안 됨.
 - 말투: ${toneLabel}
 
-글 구성(네이버 블로그·검색에 맞게):
+글 구성(네이버 블로그·검색에 맞게, 매번 다른 진행·문체로):
 1. 서론: 메인 키워드를 포함한 공감 훅으로 시작 (첫 1~2문장 안에 메인 키워드 노출).
 2. 정보/과정: 업종·강점에 맞는 유용한 정보, 서브 키워드 자연스럽게 배치.
 3. FAQ: 자주 묻는 질문 2개 Q&A (검색 질의 대응).
@@ -119,7 +133,7 @@ export async function POST(request: Request) {
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      temperature: 0.7,
+      temperature: 0.85,
     });
 
     const content = completion.choices[0]?.message?.content?.trim();

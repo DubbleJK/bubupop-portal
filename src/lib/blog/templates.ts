@@ -21,6 +21,19 @@ export const STRENGTH_OPTIONS = [
   { id: "experience", label: "오랜경험" },
   { id: "pickup", label: "방문수령" },
   { id: "fast-consult", label: "빠른상담" },
+  { id: "genuine-ink", label: "정품잉크" },
+  { id: "quick-quote", label: "빠른견적" },
+  { id: "various-materials", label: "다양한재질" },
+  { id: "design-support", label: "디자인지원" },
+  { id: "fast-shipping", label: "배송신속" },
+  { id: "revision-easy", label: "시안수정쉬움" },
+  { id: "nationwide-shipping", label: "전국배송" },
+  { id: "latest-equipment", label: "최신장비" },
+  { id: "various-finish", label: "마감다양" },
+  { id: "urgent-response", label: "긴급대응" },
+  { id: "custom-options", label: "맞춤옵션" },
+  { id: "various-experience", label: "다양한경험" },
+  { id: "careful-packing", label: "포장꼼꼼" },
 ] as const;
 
 export const LENGTH_OPTIONS = [
@@ -257,6 +270,19 @@ export const STRENGTH_PHRASES: Record<string, string> = {
   "experience": "10년 넘게 인쇄·출력 업무를 해 오면서 다양한 주문을 처리해 왔습니다.",
   "pickup": "제작 완료 후 방문 수령도 가능합니다. 지역과 수령 방법을 문의 시 말씀해 주세요.",
   "fast-consult": "견적과 상담은 빠르게 답변 드리겠습니다. 전화나 채팅으로 편하게 문의해 주세요.",
+  "genuine-ink": "정품 잉크를 사용해 색감과 내구성을 맞추고 있습니다.",
+  "quick-quote": "문의 주시면 가능한 한 빠르게 견적을 회신해 드립니다.",
+  "various-materials": "다양한 재질과 마감을 다루고 있어서, 용도에 맞는 옵션을 제안해 드립니다.",
+  "design-support": "디자인이 없으셔도 간단한 수정·구성 안내는 도와드릴 수 있습니다. 문의해 주세요.",
+  "fast-shipping": "제작 완료 후 배송이 필요하시면 신속히 발송해 드리겠습니다.",
+  "revision-easy": "시안 수정이 필요하시면 말씀해 주시면 반영해 드립니다.",
+  "nationwide-shipping": "전국 배송 가능합니다. 지역과 수령 방법을 문의 시 안내해 드립니다.",
+  "latest-equipment": "최신 장비로 작업해 품질과 납기를 맞추고 있습니다.",
+  "various-finish": "코팅, 재단, 접지 등 마감 옵션이 다양해 용도에 맞게 선택하실 수 있습니다.",
+  "urgent-response": "급한 주문도 작업량에 따라 당일·단기로 맞춰 드리는 경우가 많습니다.",
+  "custom-options": "크기, 재질, 수량 등 맞춤 옵션을 요청해 주시면 가능 범위 안에서 제안해 드립니다.",
+  "various-experience": "다양한 업종과 주문 유형을 경험해 와서, 요청하신 작업에 맞춰 제안해 드립니다.",
+  "careful-packing": "배송 시 파손 없도록 포장에 신경 써서 보내 드립니다.",
 };
 
 /** 말투 변환 (문장 끝) - 샘플만, 실제 생성 시 적용 */

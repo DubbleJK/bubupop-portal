@@ -23,6 +23,7 @@ function BlogPageContent() {
   const [sub2, setSub2] = useState("");
   const [sub3, setSub3] = useState("");
   const [industryId, setIndustryId] = useState<string>(INDUSTRY_OPTIONS[0].id);
+  const [industryCustom, setIndustryCustom] = useState("");
   const [strengths, setStrengths] = useState<string[]>([]);
   const [region, setRegion] = useState("");
   const [target, setTarget] = useState("");
@@ -58,6 +59,7 @@ function BlogPageContent() {
           mainKeyword: mainKeyword.trim(),
           subKeywords,
           industryId,
+          industryCustom: industryCustom.trim(),
           strengths,
           region: region.trim(),
           target: target.trim(),
@@ -169,6 +171,16 @@ function BlogPageContent() {
                     </option>
                   ))}
                 </select>
+              </label>
+              <label className="block">
+                <span className="text-xs text-slate-500">업종 직접 입력 (선택)</span>
+                <input
+                  type="text"
+                  value={industryCustom}
+                  onChange={(e) => setIndustryCustom(e.target.value)}
+                  placeholder="예: 명함, 스탬프, 현수막 등 템플릿에 없으면 입력"
+                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
+                />
               </label>
               <div>
                 <span className="text-xs text-slate-500 block mb-2">강점 (복수 선택)</span>
