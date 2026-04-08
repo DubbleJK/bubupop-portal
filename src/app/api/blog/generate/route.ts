@@ -16,6 +16,11 @@ export interface GenerateBody {
   industryId: string;
   industryCustom?: string;
   strengths: string[];
+  customStrength?: string;
+  customerType?: string;
+  workType?: string;
+  workTypeCustom?: string;
+  story?: string;
   region: string;
   target: string;
   length: 1000 | 1500 | 2000;
@@ -43,6 +48,15 @@ const LENGTH_RANGE: Record<1000 | 1500 | 2000, { min: number; max: number }> = {
   2000: { min: 1850, max: 2150 },
 };
 
+type TitleCandidate = { type: "정보형" | "사례형" | "문제해결형"; title: string };
+
+type ImageGuideItem = {
+  position: string;
+  description: string;
+  purpose: string;
+  altText: string;
+};
+
 export async function POST(request: Request) {
   if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json(
@@ -64,6 +78,11 @@ export async function POST(request: Request) {
     industryId,
     industryCustom,
     strengths,
+    customStrength,
+    customerType,
+    workType,
+    workTypeCustom,
+    story,
     region,
     target,
     length,
@@ -75,60 +94,100 @@ export async function POST(request: Request) {
   }
 
   const industryLabel = (industryCustom?.trim() || getIndustryLabel(industryId));
-  const strengthLabels = getStrengthLabels(strengths);
+  const strengthLabels = [
+    ...getStrengthLabels(strengths),
+    ...(customStrength?.trim() ? [customStrength.trim()] : []),
+  ];
   const toneLabel = getToneLabel(toneId);
   const lengthRange = LENGTH_RANGE[length];
+  const chosenSubKeywords = (subKeywords || []).filter(Boolean).slice(0, 3);
+  const customerTypeLabel = customerType?.trim() || target?.trim() || "개인";
+  const workTypeLabel = workTypeCustom?.trim() || workType?.trim() || industryLabel;
+  const storyText = story?.trim() || "(스토리 입력 없음)";
 
-  const systemPrompt = `당신은 네이버 블로그 SEO에 맞는 글을 쓰는 전문가입니다.
-사업 분야: 인쇄/디자인/출력/스티커/DTF/UV/배너/실사출력/의류 제작/명함.
-특히 "당일 제작", "소량 맞춤", "급한 고객도 가능", "신뢰감", "다양한 기기", "오랜 경력(10년)"을 자연스럽게 강조하는 톤을 유지하세요.
-과장 표현(최고, 1등, 무조건, 100% 등)은 사용하지 마세요.
+  const systemPrompt = `너는 네이버 SEO 기반 블로그 전문 작가이며, 실제 고객 사례를 스토리텔링으로 자연스럽게 풀어내는 에디터다.
+목표는 정보형 경험 공유 톤으로 신뢰를 형성하고, 마지막에만 부드럽게 문의를 유도하는 것이다.
 
-[네이버 블로그 SEO 원칙 - 반드시 지킬 것]
-- 제목: 메인 키워드를 앞쪽에 넣고, 25~35자 내외로 작성(네이버 검색 노출에 유리).
-- 본문 첫 문단(서론): 메인 키워드를 1~2회 자연스럽게 포함.
-- 소제목/문단: 서브 키워드와 연관 표현을 고르게 배치하되, 키워드 삽입(키워드 스터핑)은 하지 말 것.
-- 검색의도: "정보형·문의 유도형"에 맞게 유용한 정보 + 부드러운 문의 유도.
-- 해시태그: 메인·서브 키워드, 지역, 업종 관련 검색어를 포함해 10개.
-- 본문 중반~후반: 메인 키워드 또는 유사 표현을 1~2회 더 자연스럽게 넣어, 글 전체에 키워드가 고르게 분포되게 할 것.
-- 문단 길이: 한 문단은 3~5문장 내외로 나누어 가독성을 높일 것(체류 시간·이탈률에 유리).
-- 지역·타겟: 지역·타겟이 있으면 본문 중간에도 1~2회 자연스럽게 언급해 지역·롱테일 검색에 대응할 것.
-- 이미지: 본문에 넣을 이미지 개수는 고정하지 말고, SEO와 가독성을 고려해 검색에 잘 노출되는 개수만큼 직접 정하세요. 각 이미지 위치에는 "여기에 ○○○의 이미지를 넣어주세요" 형식으로, AI가 추천하는 느낌·장면(예: 작업 완료된 스티커 샘플, 제작 과정 인쇄기, 견적 상담 장면)을 구체적으로 적어 주세요. 이미지 앞뒤 문장에는 키워드나 핵심 정보를 넣어 검색·이해에 도움이 되게 할 것.
-- CTA 배치: 문의 유도(연락해 주세요 등)는 마지막 1~2문단에만 두고, 앞부분은 정보 제공에 집중할 것.
+[핵심 작성 규칙]
+- A(도입)로 시작하고 G(마무리)로 끝난다. 중간(B~F)은 흐름에 맞게 유동 조정 가능.
+- 스토리원문을 주 플롯으로 사용하고 감정선(급함/고민/불안/안도/만족)을 최소 3회 이상 드러낸다.
+- 각 블록은 서로 다른 정보와 메시지를 전달한다. 동일 강점/표현 반복 금지.
+- 문장 길이(짧음/중간/김)를 섞고, 문단 시작 표현을 반복하지 않는다.
+- 메인키워드는 총 4~6회 자연 포함(제목 1회, 서론 1회, 본문 2~4회).
+- 지역값이 있으면 제목 또는 서론에 1회 포함, 전체 최대 2회.
+- CTA는 마지막 2~3문장에 1회만, 명령형 광고 문구 금지.
+- 과장/낚시 금지: 최고, 1위, 무조건, 100%, 완벽, 충격, 역대급, 안 보면 손해.
 
-[글 길이 - 반드시 준수]
-- 본문 body의 한글 글자 수는 요청 시 안내하는 허용 범위(최소~최대) 안에 반드시 들어가야 합니다. 범위 미만이거나 초과하면 부적격입니다. 작성 후 글자 수를 확인해 범위 안에 맞출 것.
-- 1000자 선택 시: 본문 900~1100자(±100자).
-- 1500자 선택 시: 본문 1350~1650자(±150자).
-- 2000자 선택 시: 본문 1850~2150자(±150자).
+[제목 규칙]
+- 제목은 3개만 생성.
+- 유형은 정보형/사례형/문제해결형 각각 1개.
+- 모든 제목에서 메인키워드를 앞쪽에 1회 포함.
+- 길이는 24~34자 내외.
 
-[문체·구성 다양화 - 매번 다르게]
-- 매번 다른 문체와 진행 방향으로 작성하세요. 같은 형식을 반복하지 마세요.
-- 서론: 때로는 질문으로, 때로는 경험담·사실 제시, 때로는 고객 목소리 인용 등 다양한 방식으로 시작할 것.
-- 문단 순서·강조하는 부분·비유나 예시 사용 여부를 바꿔 가며 작성할 것.
-- 문장 길이와 호칭도 가볍게 변형해, 검색 요건은 유지하면서 읽는 느낌이 매번 달라지게 할 것.
+[필수 본문 포인트]
+- DTF 장점과 "작은 글씨 선명함" 문구를 반드시 포함.
+- 차별점: 당일 제작 가능, 여성기업 인증, 예산 맞춤 단가, 관공서 경험.
+- 이미지 가이드는 최소 10개.
 
-응답은 반드시 다음 JSON 형식만 출력하세요. 다른 설명이나 마크다운 없이 JSON만 출력합니다.
+[출력]
+설명 없이 JSON만 출력한다.`;
+
+  const userPrompt = `아래 입력값으로 작성하세요.
+
+[입력값]
+- 메인키워드: ${mainKeyword}
+- 고객유형: ${customerTypeLabel}
+- 작업내용: ${workTypeLabel}
+- 강조강점: ${strengthLabels.length ? strengthLabels.join(", ") : "(없음)"}
+- 스토리원문: ${storyText}
+- 목표글자수: ${length} (허용 범위 ${lengthRange.min}~${lengthRange.max})
+- 지역: ${region || "(없음)"}
+- 추가 타겟: ${target || "(없음)"}
+- 말투 옵션: ${toneLabel}
+- 사용자 제공 서브키워드(있으면 우선 반영): ${chosenSubKeywords.join(", ") || "(없음)"}
+
+[톤 조정]
+- 관공서/기업: 신뢰/절차/정확성 중심
+- 개인/소상공인: 친근함/편의성 중심
+- 급한 고객: 속도/대응력 중심
+
+[블록 구조]
+A 도입부
+B 고객 상황
+C 우리를 선택한 이유
+D 작업 과정
+E 결과 및 퀄리티
+F 차별점 강조
+G 마무리
+
+[JSON 스키마]
 {
-  "titleCandidates": ["제목1", "제목2", "제목3", "제목4", "제목5"],
-  "body": "본문 전체 텍스트. 문단은 줄바꿈 두 번으로 구분. 이미지 위치에는 '여기에 ○○○의 이미지를 넣어주세요' 형식으로, AI가 추천하는 이미지 느낌·장면을 구체적으로 적어 주세요. 개수는 SEO에 맞게 검색이 잘 되는 수로 정하세요.",
-  "hashtags": ["태그1", "태그2", ... "태그10"]
+  "subKeywordSuggestions": ["...5개..."],
+  "selectedSubKeywords": ["...3개..."],
+  "titleCandidates": [
+    {"type":"정보형","title":"..."},
+    {"type":"사례형","title":"..."},
+    {"type":"문제해결형","title":"..."}
+  ],
+  "body": "A~G가 반영된 본문",
+  "imageGuide": [{"position":"B-2","description":"...","purpose":"...","altText":"..."}],
+  "metaDescription": "...",
+  "hashtags": ["...10개..."],
+  "storyReflectionChecklist": {
+    "coreEventUsed": true,
+    "emotionsIncluded": ["급함","고민","만족"],
+    "whereReflected": ["A","B","G"]
+  },
+  "qualityChecklist": {
+    "lengthInRange": true,
+    "mainKeywordCount_4to6": true,
+    "regionalKeywordRulePassed": true,
+    "noOverclaimExpressions": true,
+    "noBlockDuplication": true,
+    "ctaPlacedAtEndingOnly": true,
+    "imageGuideCountOver10": true
+  }
 }`;
-
-  const userPrompt = `다음 조건으로 네이버 검색 노출을 고려한 블로그 글을 작성해 주세요.
-
-- 메인 키워드(반드시 제목·서론에 자연스럽게 포함): ${mainKeyword}
-- 서브 키워드(본문 곳곳에 고르게 사용): ${(subKeywords || []).filter(Boolean).join(", ") || "(없음)"}
-- 업종: ${industryLabel}
-- 강조할 강점: ${strengthLabels.length ? strengthLabels.join(", ") : "(없음)"}
-- 지역(제목·본문·해시태그에 활용): ${region || "(지역 없음)"}
-- 타겟: ${target || "(타겟 없음)"}
-- 글 길이(반드시 준수): 본문 body 한글 기준 ${lengthRange.min}자 이상 ${lengthRange.max}자 이하로 작성. 이 범위를 벗어나면 부적격입니다. 작성 후 글자 수가 ${lengthRange.min}~${lengthRange.max}자 안에 오는지 확인할 것.
-- 말투: ${toneLabel}
-
-글 구성: 고정된 형식(서론→정보→FAQ→마무리)을 쓰지 말고, AI가 네이버 블로그 SEO와 읽는 재미를 고려해 추천하는 형태로 자유롭게 구성해 주세요. 단, 제목·서론에 메인 키워드 노출, 본문에 서브 키워드·지역·타겟 자연스럽게 배치, 문의 유도는 글 후반에 두는 등 SEO 원칙은 지킬 것.
-
-본문에는 이미지를 넣을 위치를 SEO에 맞게 검색이 잘 되는 개수만큼 두고, 각 위치에는 "여기에 ○○○의 이미지를 넣어주세요"처럼 어떤 느낌·장면의 이미지인지 AI가 구체적으로 추천해 적어 주세요. 해시태그 10개는 메인·서브 키워드, 지역, 업종 관련 검색어를 포함해 만들어 주세요.`;
 
   try {
     const completion = await openai.chat.completions.create({
@@ -154,26 +213,101 @@ export async function POST(request: Request) {
     if (jsonMatch) jsonStr = jsonMatch[1].trim();
 
     const parsed = JSON.parse(jsonStr) as {
-      titleCandidates?: string[];
+      subKeywordSuggestions?: unknown[];
+      selectedSubKeywords?: unknown[];
+      titleCandidates?: unknown[];
       body?: string;
-      hashtags?: string[];
+      imageGuide?: unknown[];
+      metaDescription?: string;
+      hashtags?: unknown[];
+      storyReflectionChecklist?: unknown;
+      qualityChecklist?: unknown;
     };
 
-    const titleCandidates = Array.isArray(parsed.titleCandidates)
-      ? parsed.titleCandidates.slice(0, 5)
+    const titleCandidates: TitleCandidate[] = Array.isArray(parsed.titleCandidates)
+      ? parsed.titleCandidates
+          .map((item, index) => {
+            if (typeof item === "object" && item !== null) {
+              const type = (item as { type?: string }).type;
+              const title = (item as { title?: string }).title;
+              if (
+                (type === "정보형" || type === "사례형" || type === "문제해결형") &&
+                typeof title === "string" &&
+                title.trim()
+              ) {
+                return { type, title: title.trim() } as TitleCandidate;
+              }
+            }
+            if (typeof item === "string" && item.trim()) {
+              const fallbackTypes: TitleCandidate["type"][] = ["정보형", "사례형", "문제해결형"];
+              return { type: fallbackTypes[index] ?? "정보형", title: item.trim() } as TitleCandidate;
+            }
+            return null;
+          })
+          .filter((v): v is TitleCandidate => v !== null)
+          .slice(0, 3)
       : [];
     const bodyText =
       typeof parsed.body === "string"
         ? parsed.body
         : "";
     const hashtags = Array.isArray(parsed.hashtags)
-      ? parsed.hashtags.slice(0, 10).map((h) => (typeof h === "string" ? h.replace(/^#/, "") : String(h)))
+      ? parsed.hashtags
+          .slice(0, 10)
+          .map((h) => (typeof h === "string" ? h.replace(/^#/, "") : String(h)))
+      : [];
+
+    const subKeywordSuggestions = Array.isArray(parsed.subKeywordSuggestions)
+      ? parsed.subKeywordSuggestions
+          .map((k) => (typeof k === "string" ? k.trim() : ""))
+          .filter(Boolean)
+          .slice(0, 5)
+      : [];
+
+    const selectedSubKeywords = Array.isArray(parsed.selectedSubKeywords)
+      ? parsed.selectedSubKeywords
+          .map((k) => (typeof k === "string" ? k.trim() : ""))
+          .filter(Boolean)
+          .slice(0, 3)
+      : [];
+
+    const imageGuide: ImageGuideItem[] = Array.isArray(parsed.imageGuide)
+      ? parsed.imageGuide
+          .map((item) => {
+            if (typeof item !== "object" || item === null) return null;
+            const position = (item as { position?: string }).position;
+            const description = (item as { description?: string }).description;
+            const purpose = (item as { purpose?: string }).purpose;
+            const altText = (item as { altText?: string }).altText;
+            if (
+              typeof position === "string" &&
+              typeof description === "string" &&
+              typeof purpose === "string" &&
+              typeof altText === "string"
+            ) {
+              return {
+                position: position.trim(),
+                description: description.trim(),
+                purpose: purpose.trim(),
+                altText: altText.trim(),
+              };
+            }
+            return null;
+          })
+          .filter((v): v is ImageGuideItem => v !== null)
+          .slice(0, 20)
       : [];
 
     return NextResponse.json({
+      subKeywordSuggestions,
+      selectedSubKeywords,
       titleCandidates,
       body: bodyText,
+      imageGuide,
+      metaDescription: typeof parsed.metaDescription === "string" ? parsed.metaDescription : "",
       hashtags,
+      storyReflectionChecklist: parsed.storyReflectionChecklist ?? null,
+      qualityChecklist: parsed.qualityChecklist ?? null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "OpenAI 요청 실패";

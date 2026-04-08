@@ -11,10 +11,43 @@ import {
 } from "@/lib/blog/templates";
 
 interface BlogOutput {
-  titleCandidates: string[];
+  subKeywordSuggestions: string[];
+  selectedSubKeywords: string[];
+  titleCandidates: { type: string; title: string }[];
   body: string;
+  imageGuide: { position: string; description: string; purpose: string; altText: string }[];
+  metaDescription: string;
   hashtags: string[];
+  storyReflectionChecklist?: {
+    coreEventUsed?: boolean;
+    emotionsIncluded?: string[];
+    whereReflected?: string[];
+  } | null;
+  qualityChecklist?: Record<string, boolean> | null;
 }
+
+const CUSTOMER_TYPE_OPTIONS = [
+  "단체",
+  "개인",
+  "기업",
+  "관공서",
+  "동호회",
+  "학교",
+  "학생",
+  "헬스장",
+  "기타",
+] as const;
+
+const WORK_TYPE_OPTIONS = [
+  "DTF출력",
+  "UV스티커",
+  "스티커",
+  "명함",
+  "배너",
+  "단체티셔츠",
+  "키링",
+  "기타",
+] as const;
 
 function BlogPageContent() {
   const searchParams = useSearchParams();
@@ -24,9 +57,14 @@ function BlogPageContent() {
   const [sub3, setSub3] = useState("");
   const [industryId, setIndustryId] = useState<string>(INDUSTRY_OPTIONS[0].id);
   const [industryCustom, setIndustryCustom] = useState("");
+  const [customerType, setCustomerType] = useState<string>(CUSTOMER_TYPE_OPTIONS[0]);
+  const [workType, setWorkType] = useState<string>(WORK_TYPE_OPTIONS[0]);
+  const [workTypeCustom, setWorkTypeCustom] = useState("");
   const [strengths, setStrengths] = useState<string[]>([]);
+  const [customStrength, setCustomStrength] = useState("");
   const [region, setRegion] = useState("");
   const [target, setTarget] = useState("");
+  const [story, setStory] = useState("");
   const [length, setLength] = useState<1000 | 1500 | 2000>(1500);
   const [toneId, setToneId] = useState<string>(TONE_OPTIONS[0].id);
   const [result, setResult] = useState<BlogOutput | null>(null);
@@ -47,6 +85,10 @@ function BlogPageContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mainKeyword.trim()) return;
+    if (!story.trim()) {
+      setError("스토리 내용을 입력해 주세요.");
+      return;
+    }
     setError(null);
     setResult(null);
     setLoading(true);
@@ -60,9 +102,14 @@ function BlogPageContent() {
           subKeywords,
           industryId,
           industryCustom: industryCustom.trim(),
+          customerType,
+          workType,
+          workTypeCustom: workTypeCustom.trim(),
           strengths,
+          customStrength: customStrength.trim(),
           region: region.trim(),
           target: target.trim(),
+          story: story.trim(),
           length,
           toneId,
         }),
@@ -73,9 +120,15 @@ function BlogPageContent() {
         return;
       }
       setResult({
+        subKeywordSuggestions: data.subKeywordSuggestions ?? [],
+        selectedSubKeywords: data.selectedSubKeywords ?? [],
         titleCandidates: data.titleCandidates ?? [],
         body: data.body ?? "",
+        imageGuide: data.imageGuide ?? [],
+        metaDescription: data.metaDescription ?? "",
         hashtags: data.hashtags ?? [],
+        storyReflectionChecklist: data.storyReflectionChecklist ?? null,
+        qualityChecklist: data.qualityChecklist ?? null,
       });
     } catch {
       setError("네트워크 오류가 났습니다. 다시 시도해 주세요.");
@@ -156,8 +209,48 @@ function BlogPageContent() {
           </section>
 
           <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4">업종 · 강점 · 지역</h2>
+            <h2 className="text-sm font-semibold text-slate-700 mb-4">고객유형 · 작업내용 · 강점 · 지역</h2>
             <div className="space-y-4">
+              <label className="block">
+                <span className="text-xs text-slate-500">고객 유형</span>
+                <select
+                  value={customerType}
+                  onChange={(e) => setCustomerType(e.target.value)}
+                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
+                >
+                  {CUSTOMER_TYPE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-xs text-slate-500">작업 내용</span>
+                <select
+                  value={workType}
+                  onChange={(e) => setWorkType(e.target.value)}
+                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
+                >
+                  {WORK_TYPE_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {workType === "기타" && (
+                <label className="block">
+                  <span className="text-xs text-slate-500">작업 내용 직접 입력</span>
+                  <input
+                    type="text"
+                    value={workTypeCustom}
+                    onChange={(e) => setWorkTypeCustom(e.target.value)}
+                    placeholder="예: 아크릴 굿즈, 안내판"
+                    className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
+                  />
+                </label>
+              )}
               <label className="block">
                 <span className="text-xs text-slate-500">업종 템플릿</span>
                 <select
@@ -198,6 +291,16 @@ function BlogPageContent() {
                   ))}
                 </div>
               </div>
+              <label className="block">
+                <span className="text-xs text-slate-500">강점 추가 입력 (선택)</span>
+                <input
+                  type="text"
+                  value={customStrength}
+                  onChange={(e) => setCustomStrength(e.target.value)}
+                  placeholder="예: 여성기업 인증, 관공서 납품 경험"
+                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
+                />
+              </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="block">
                   <span className="text-xs text-slate-500">지역</span>
@@ -221,6 +324,20 @@ function BlogPageContent() {
                 </label>
               </div>
             </div>
+          </section>
+
+          <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-700 mb-4">스토리 원문</h2>
+            <label className="block">
+              <span className="text-xs text-slate-500">실제 고객 상황/감정/요청 내용을 자세히 입력</span>
+              <textarea
+                value={story}
+                onChange={(e) => setStory(e.target.value)}
+                placeholder="예: 행사 일정이 이틀 남아 급하게 단체티를 준비해야 했고, 이전 업체는 답변이 늦어서..."
+                className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 min-h-40"
+                required
+              />
+            </label>
           </section>
 
           <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
@@ -272,17 +389,19 @@ function BlogPageContent() {
         {result && (
           <div className="mt-8 space-y-6">
             <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-700 mb-3">제목 후보 5개</h2>
+              <h2 className="text-sm font-semibold text-slate-700 mb-3">제목 후보 3개</h2>
               <ul className="space-y-2">
                 {result.titleCandidates.map((t, i) => (
                   <li
                     key={i}
                     className="flex items-center justify-between gap-2 p-2 rounded bg-slate-50"
                   >
-                    <span className="text-sm text-slate-800">{t}</span>
+                    <span className="text-sm text-slate-800">
+                      [{t.type}] {t.title}
+                    </span>
                     <button
                       type="button"
-                      onClick={() => copyToClipboard(t)}
+                      onClick={() => copyToClipboard(t.title)}
                       className="text-xs text-blue-600 hover:underline"
                     >
                       복사
@@ -290,6 +409,26 @@ function BlogPageContent() {
                   </li>
                 ))}
               </ul>
+            </section>
+
+            <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
+              <h2 className="text-sm font-semibold text-slate-700 mb-3">서브 키워드 추천/선택</h2>
+              <p className="text-xs text-slate-500 mb-2">추천 5개</p>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {result.subKeywordSuggestions.map((k, i) => (
+                  <span key={`${k}-${i}`} className="px-2 py-1 bg-slate-100 rounded text-sm text-slate-700">
+                    {k}
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 mb-2">본문 반영 3개</p>
+              <div className="flex flex-wrap gap-2">
+                {result.selectedSubKeywords.map((k, i) => (
+                  <span key={`${k}-${i}`} className="px-2 py-1 bg-blue-50 rounded text-sm text-blue-700">
+                    {k}
+                  </span>
+                ))}
+              </div>
             </section>
 
             <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
@@ -307,6 +446,20 @@ function BlogPageContent() {
                 {result.body}
               </div>
               <p className="mt-2 text-xs text-slate-500">약 {result.body.length}자</p>
+            </section>
+
+            <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
+              <h2 className="text-sm font-semibold text-slate-700 mb-3">이미지 가이드</h2>
+              <div className="space-y-3">
+                {result.imageGuide.map((img, i) => (
+                  <div key={`${img.position}-${i}`} className="rounded-lg border border-slate-200 p-3 bg-slate-50">
+                    <p className="text-xs text-slate-500">{img.position}</p>
+                    <p className="text-sm text-slate-800 mt-1">{img.description}</p>
+                    <p className="text-xs text-slate-600 mt-1">의도: {img.purpose}</p>
+                    <p className="text-xs text-slate-600 mt-1">ALT: {img.altText}</p>
+                  </div>
+                ))}
+              </div>
             </section>
 
             <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
@@ -329,6 +482,13 @@ function BlogPageContent() {
                 해시태그 복사
               </button>
             </section>
+
+            {result.metaDescription && (
+              <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
+                <h2 className="text-sm font-semibold text-slate-700 mb-3">메타 설명</h2>
+                <p className="text-sm text-slate-700">{result.metaDescription}</p>
+              </section>
+            )}
           </div>
         )}
       </main>
