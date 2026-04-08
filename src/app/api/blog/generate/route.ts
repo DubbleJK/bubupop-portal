@@ -13,7 +13,8 @@ const openai = new OpenAI({
 export interface GenerateBody {
   mainKeyword: string;
   subKeywords: string[];
-  industryId: string;
+  /** UI에서 제거됨 — 없으면 작업 종류로 추론 */
+  industryId?: string;
   industryCustom?: string;
   strengths: string[];
   customStrength?: string;
@@ -22,7 +23,8 @@ export interface GenerateBody {
   workTypeCustom?: string;
   story?: string;
   region: string;
-  target: string;
+  /** 구버전 호환 (폼에서는 미사용) */
+  target?: string;
   length: 1000 | 1500 | 2000;
   toneId: string;
 }
@@ -39,6 +41,19 @@ function getStrengthLabels(ids: string[]): string[] {
 
 function getToneLabel(id: string): string {
   return TONE_OPTIONS.find((o) => o.id === id)?.label ?? id;
+}
+
+/** 작업 종류만으로 업종 힌트 추론 (업종 템플릿 UI 제거 대응) */
+function deriveIndustryIdFromWorkType(workType?: string): string {
+  const w = workType?.trim() || "";
+  if (w.includes("DTF")) return "dtf";
+  if (w.includes("UV")) return "uv";
+  if (w.includes("스티커")) return "sticker";
+  if (w.includes("배너")) return "banner";
+  if (w.includes("명함")) return "menu";
+  if (w.includes("티") || w.includes("조끼")) return "apparel";
+  if (w.includes("키링")) return "sticker";
+  return "dtf";
 }
 
 /** 선택한 글 길이에 따른 허용 범위 (한글 기준) */
@@ -93,16 +108,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "메인 키워드를 입력해 주세요." }, { status: 400 });
   }
 
-  const industryLabel = (industryCustom?.trim() || getIndustryLabel(industryId));
+  const resolvedIndustryId =
+    industryId?.trim() || deriveIndustryIdFromWorkType(workType);
+  const industryLabel =
+    industryCustom?.trim() || getIndustryLabel(resolvedIndustryId);
   const strengthLabels = [
     ...getStrengthLabels(strengths),
     ...(customStrength?.trim() ? [customStrength.trim()] : []),
   ];
+  const strengthHint =
+    strengthLabels.length > 0
+      ? strengthLabels.join(" · ")
+      : "(강점 미선택 — 스토리에서 자연스럽게 드러나는 장점만 쓸 것)";
   const toneLabel = getToneLabel(toneId);
   const lengthRange = LENGTH_RANGE[length];
   const chosenSubKeywords = (subKeywords || []).filter(Boolean).slice(0, 3);
   const customerTypeLabel = customerType?.trim() || target?.trim() || "개인";
-  const workTypeLabel = workTypeCustom?.trim() || workType?.trim() || industryLabel;
+  const workTypeLabel =
+    workTypeCustom?.trim() || workType?.trim() || industryLabel;
   const storyText = story?.trim() || "(스토리 입력 없음)";
 
   const systemPrompt = `너는 네이버 SEO 기반 블로그 전문 카피라이터이자, 실제 제작 사례를 스토리텔링으로 설득력 있게 풀어내는 에디터다.
@@ -110,9 +133,9 @@ export async function POST(request: Request) {
 문체는 딱딱한 보고서가 아니라, 현장 경험을 들려주는 블로그 화법으로 작성한다.
 
 [핵심 작성 규칙]
-- A(도입)로 시작하고 G(마무리)로 끝난다. 중간(B~F)은 흐름에 맞게 유동 조정 가능.
+- 내부 구상용으로만 도입→상황→이유→과정→결과→차별→마무리 흐름을 지킨다. 본문에 "A 도입부", "B 고객 상황" 같은 블록 라벨을 절대 쓰지 않는다.
 - 스토리원문을 주 플롯으로 사용하고 감정선(급함/고민/불안/안도/만족)을 최소 3회 이상 드러낸다.
-- 각 블록은 서로 다른 정보와 메시지를 전달한다. 동일 강점/표현 반복 금지.
+- 체크리스트처럼 항목을 줄줄 나열하지 않는다. 같은 뜻(품질·장비·잉크 등)은 한 번만 말한다.
 - 문장 길이(짧음/중간/김)를 섞고, 문단 시작 표현을 반복하지 않는다.
 - 메인키워드는 총 4~6회 자연 포함(제목 1회, 서론 1회, 본문 2~4회).
 - 지역값이 있으면 제목 또는 서론에 1회 포함, 전체 최대 2회.
@@ -132,13 +155,13 @@ export async function POST(request: Request) {
 - 길이는 24~34자 내외.
 
 [필수 본문 포인트]
-- DTF 장점과 "작은 글씨 선명함" 문구를 반드시 포함.
-- 차별점: 당일 제작 가능, 여성기업 인증, 예산 맞춤 단가, 관공서 경험.
+- DTF가 맥락에 맞을 때만: DTF 장점과 "작은 글씨 선명함"을 자연스럽게 포함. DTF가 아닌 품목이면 해당 공정에 맞는 선명도·내구 표현으로 대체.
+- 차별점(당일 제작, 여성기업 인증, 예산 맞춤, 관공서 경험)은 스토리와 맞닿는 것만 골라 1~2문장씩 녹인다. 네 가지를 한꺼번에 나열하지 않는다.
 - 이미지 가이드는 최소 10개.
 
 [본문 포맷]
 - body는 마크다운 스타일로 작성한다.
-- 최소 4개 이상의 섹션 제목(## 또는 ###)을 사용해 가독성을 높인다.
+- 최소 4개 이상의 섹션 제목(## 또는 ###)을 사용해 가독성을 높인다. 소제목은 독자가 읽는 제목만 쓴다.
 - 필요 시 불릿 목록을 사용하되 남발하지 않는다.
 - 마지막은 CTA 성격의 소제목으로 마무리 가능하다.
 
@@ -150,34 +173,26 @@ export async function POST(request: Request) {
 [입력값]
 - 메인키워드: ${mainKeyword}
 - 고객유형: ${customerTypeLabel}
-- 작업내용: ${workTypeLabel}
-- 강조강점: ${strengthLabels.length ? strengthLabels.join(", ") : "(없음)"}
+- 작업·품목: ${workTypeLabel}
+- 강점 힌트(나열 금지, 아래 [강점 처리] 참고): ${strengthHint}
 - 스토리원문: ${storyText}
 - 목표글자수: ${length} (허용 범위 ${lengthRange.min}~${lengthRange.max})
 - 지역: ${region || "(없음)"}
-- 추가 타겟: ${target || "(없음)"}
-- 말투 옵션: ${toneLabel}
-- 사용자 제공 서브키워드(있으면 우선 반영): ${chosenSubKeywords.join(", ") || "(없음)"}
+- 말투·톤: "${toneLabel}" + 고객유형 "${customerTypeLabel}"에 맞춘다.
+  · 관공서/기업: 신뢰·절차·정확성
+  · 개인/단체/소상공인 성격: 친근함·편의성
+  · 스토리에 급함이 있으면: 대응 속도·커뮤니케이션을 자연스럽게
+- 참고 서브키워드(있으면 우선 반영, 없으면 AI가 제안): ${chosenSubKeywords.join(", ") || "(없음)"}
 
-[톤 조정]
-- 관공서/기업: 신뢰/절차/정확성 중심
-- 개인/소상공인: 친근함/편의성 중심
-- 급한 고객: 속도/대응력 중심
+[강점 처리 — 중복 방지]
+- 위 강점 힌트를 본문에서 "소량맞춤, 퀄리티, 빠른상담…" 식으로 줄줄 읽지 않는다.
+- 의미가 겹치는 항목은 하나로 합쳐 최대 2~3개 테마로만 본문에 녹인다 (예: 퀄리티+정품잉크+최신장비 → 인쇄 품질 한 덩어리).
 
 [중요]
 - 결과물이 평범한 설명문처럼 보이지 않게, "실제 후기 기반 브랜드 콘텐츠" 느낌으로 작성한다.
 - 첫 문단에서 독자의 고민을 정확히 찌르는 문장을 넣는다.
 - 중간에는 "왜 우리를 선택했는지"가 자연스럽게 납득되도록 사례 디테일을 배치한다.
 - 마지막 CTA는 부담 주지 않는 제안형 문장으로 작성하되, 문의로 이어질 수 있게 마무리한다.
-
-[블록 구조]
-A 도입부
-B 고객 상황
-C 우리를 선택한 이유
-D 작업 과정
-E 결과 및 퀄리티
-F 차별점 강조
-G 마무리
 
 [JSON 스키마]
 {
@@ -188,7 +203,7 @@ G 마무리
     {"type":"사례형","title":"..."},
     {"type":"문제해결형","title":"..."}
   ],
-  "body": "A~G가 반영된 본문",
+  "body": "흐름이 반영된 본문(블록 라벨 금지)",
   "imageGuide": [{"position":"B-2","description":"...","purpose":"...","altText":"..."}],
   "metaDescription": "...",
   "hashtags": ["...10개..."],
@@ -215,7 +230,7 @@ G 마무리
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      temperature: 0.85,
+      temperature: 0.88,
     });
 
     const content = completion.choices[0]?.message?.content?.trim();

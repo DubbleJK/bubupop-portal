@@ -4,7 +4,6 @@ import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
-  INDUSTRY_OPTIONS,
   STRENGTH_OPTIONS,
   LENGTH_OPTIONS,
   TONE_OPTIONS,
@@ -45,25 +44,24 @@ const WORK_TYPE_OPTIONS = [
   "명함",
   "배너",
   "단체티셔츠",
+  "작업조끼",
   "키링",
   "기타",
 ] as const;
 
+const MAX_STRENGTH_PICKS = 5;
+
 function BlogPageContent() {
   const searchParams = useSearchParams();
   const [mainKeyword, setMainKeyword] = useState("");
-  const [sub1, setSub1] = useState("");
-  const [sub2, setSub2] = useState("");
-  const [sub3, setSub3] = useState("");
-  const [industryId, setIndustryId] = useState<string>(INDUSTRY_OPTIONS[0].id);
-  const [industryCustom, setIndustryCustom] = useState("");
+  /** 쉼표로 구분. 비우면 AI가 서브 키워드만 제안 */
+  const [extraKeywords, setExtraKeywords] = useState("");
   const [customerType, setCustomerType] = useState<string>(CUSTOMER_TYPE_OPTIONS[0]);
   const [workType, setWorkType] = useState<string>(WORK_TYPE_OPTIONS[0]);
   const [workTypeCustom, setWorkTypeCustom] = useState("");
   const [strengths, setStrengths] = useState<string[]>([]);
   const [customStrength, setCustomStrength] = useState("");
   const [region, setRegion] = useState("");
-  const [target, setTarget] = useState("");
   const [story, setStory] = useState("");
   const [length, setLength] = useState<1000 | 1500 | 2000>(1500);
   const [toneId, setToneId] = useState<string>(TONE_OPTIONS[0].id);
@@ -77,9 +75,11 @@ function BlogPageContent() {
   }, [searchParams]);
 
   const toggleStrength = (id: string) => {
-    setStrengths((prev) =>
-      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
-    );
+    setStrengths((prev) => {
+      if (prev.includes(id)) return prev.filter((s) => s !== id);
+      if (prev.length >= MAX_STRENGTH_PICKS) return prev;
+      return [...prev, id];
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -92,7 +92,11 @@ function BlogPageContent() {
     setError(null);
     setResult(null);
     setLoading(true);
-    const subKeywords = [sub1, sub2, sub3].filter(Boolean);
+    const subKeywords = extraKeywords
+      .split(/[,，]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 5);
     try {
       const res = await fetch("/api/blog/generate", {
         method: "POST",
@@ -100,15 +104,12 @@ function BlogPageContent() {
         body: JSON.stringify({
           mainKeyword: mainKeyword.trim(),
           subKeywords,
-          industryId,
-          industryCustom: industryCustom.trim(),
           customerType,
           workType,
           workTypeCustom: workTypeCustom.trim(),
           strengths,
           customStrength: customStrength.trim(),
           region: region.trim(),
-          target: target.trim(),
           story: story.trim(),
           length,
           toneId,
@@ -160,7 +161,10 @@ function BlogPageContent() {
       <main className="max-w-4xl mx-auto p-4 md:p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4">키워드</h2>
+            <h2 className="text-sm font-semibold text-slate-700 mb-1">키워드</h2>
+            <p className="text-xs text-slate-500 mb-4">
+              서브 키워드는 비워도 됩니다. AI가 메인 키워드로 5개를 제안하고, 그중 3개를 골라 본문에 씁니다.
+            </p>
             <div className="space-y-3">
               <label className="block">
                 <span className="text-xs text-slate-500">메인 키워드 (필수)</span>
@@ -173,60 +177,53 @@ function BlogPageContent() {
                   required
                 />
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <label className="block">
-                  <span className="text-xs text-slate-500">서브 키워드 1</span>
-                  <input
-                    type="text"
-                    value={sub1}
-                    onChange={(e) => setSub1(e.target.value)}
-                    placeholder="선택"
-                    className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs text-slate-500">서브 키워드 2</span>
-                  <input
-                    type="text"
-                    value={sub2}
-                    onChange={(e) => setSub2(e.target.value)}
-                    placeholder="선택"
-                    className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs text-slate-500">서브 키워드 3</span>
-                  <input
-                    type="text"
-                    value={sub3}
-                    onChange={(e) => setSub3(e.target.value)}
-                    placeholder="선택"
-                    className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
-                  />
-                </label>
-              </div>
+              <label className="block">
+                <span className="text-xs text-slate-500">참고 키워드 (선택, 쉼표로 구분)</span>
+                <input
+                  type="text"
+                  value={extraKeywords}
+                  onChange={(e) => setExtraKeywords(e.target.value)}
+                  placeholder="예: 단체조끼, 로고인쇄, 부산"
+                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
+                />
+              </label>
             </div>
           </section>
 
           <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4">고객유형 · 작업내용 · 강점 · 지역</h2>
+            <h2 className="text-sm font-semibold text-slate-700 mb-1">누구 · 무엇 · 어디</h2>
+            <p className="text-xs text-slate-500 mb-4">
+              예전 화면의 &quot;업종 템플릿&quot;은 작업 종류와 겹쳐 혼란을 줄 수 있어 제거했습니다. 품목은 작업 내용(또는 기타 입력)에만 맞추면 됩니다.
+            </p>
             <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="block">
+                  <span className="text-xs text-slate-500">고객 유형</span>
+                  <select
+                    value={customerType}
+                    onChange={(e) => setCustomerType(e.target.value)}
+                    className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
+                  >
+                    {CUSTOMER_TYPE_OPTIONS.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="text-xs text-slate-500">지역 (선택)</span>
+                  <input
+                    type="text"
+                    value={region}
+                    onChange={(e) => setRegion(e.target.value)}
+                    placeholder="예: 부산"
+                    className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
+                  />
+                </label>
+              </div>
               <label className="block">
-                <span className="text-xs text-slate-500">고객 유형</span>
-                <select
-                  value={customerType}
-                  onChange={(e) => setCustomerType(e.target.value)}
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
-                >
-                  {CUSTOMER_TYPE_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs text-slate-500">작업 내용</span>
+                <span className="text-xs text-slate-500">작업 · 품목</span>
                 <select
                   value={workType}
                   onChange={(e) => setWorkType(e.target.value)}
@@ -241,7 +238,7 @@ function BlogPageContent() {
               </label>
               {workType === "기타" && (
                 <label className="block">
-                  <span className="text-xs text-slate-500">작업 내용 직접 입력</span>
+                  <span className="text-xs text-slate-500">품목 직접 입력</span>
                   <input
                     type="text"
                     value={workTypeCustom}
@@ -251,32 +248,13 @@ function BlogPageContent() {
                   />
                 </label>
               )}
-              <label className="block">
-                <span className="text-xs text-slate-500">업종 템플릿</span>
-                <select
-                  value={industryId}
-                  onChange={(e) => setIndustryId(e.target.value)}
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
-                >
-                  {INDUSTRY_OPTIONS.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-xs text-slate-500">업종 직접 입력 (선택)</span>
-                <input
-                  type="text"
-                  value={industryCustom}
-                  onChange={(e) => setIndustryCustom(e.target.value)}
-                  placeholder="예: 명함, 스탬프, 현수막 등 템플릿에 없으면 입력"
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
-                />
-              </label>
               <div>
-                <span className="text-xs text-slate-500 block mb-2">강점 (복수 선택)</span>
+                <span className="text-xs text-slate-500 block mb-1">
+                  강점 (최대 {MAX_STRENGTH_PICKS}개)
+                </span>
+                <p className="text-xs text-amber-700/90 mb-2">
+                  너무 많이 고르면 글이 &quot;체크리스트&quot;처럼 딱딱해질 수 있어요. 꼭 쓰고 싶은 것만 골라 주세요.
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {STRENGTH_OPTIONS.map((o) => (
                     <label key={o.id} className="inline-flex items-center gap-1.5">
@@ -284,7 +262,8 @@ function BlogPageContent() {
                         type="checkbox"
                         checked={strengths.includes(o.id)}
                         onChange={() => toggleStrength(o.id)}
-                        className="rounded border-slate-300"
+                        disabled={!strengths.includes(o.id) && strengths.length >= MAX_STRENGTH_PICKS}
+                        className="rounded border-slate-300 disabled:opacity-40"
                       />
                       <span className="text-sm">{o.label}</span>
                     </label>
@@ -292,37 +271,15 @@ function BlogPageContent() {
                 </div>
               </div>
               <label className="block">
-                <span className="text-xs text-slate-500">강점 추가 입력 (선택)</span>
+                <span className="text-xs text-slate-500">강점 한 줄 메모 (선택)</span>
                 <input
                   type="text"
                   value={customStrength}
                   onChange={(e) => setCustomStrength(e.target.value)}
-                  placeholder="예: 여성기업 인증, 관공서 납품 경험"
+                  placeholder="예: 여성기업 인증, AI 로고 복원 경험"
                   className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
                 />
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="text-xs text-slate-500">지역</span>
-                  <input
-                    type="text"
-                    value={region}
-                    onChange={(e) => setRegion(e.target.value)}
-                    placeholder="예: 부산"
-                    className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs text-slate-500">타겟</span>
-                  <input
-                    type="text"
-                    value={target}
-                    onChange={(e) => setTarget(e.target.value)}
-                    placeholder="예: 소상공인, 급한 고객"
-                    className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
-                  />
-                </label>
-              </div>
             </div>
           </section>
 
