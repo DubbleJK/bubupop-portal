@@ -25,6 +25,9 @@ interface BlogOutput {
   qualityChecklist?: Record<string, boolean> | null;
 }
 
+/** select에서 `기타`는 value 충돌·인코딩 이슈를 피하려고 별도 값 사용 */
+const SELECT_OTHER = "other";
+
 const CUSTOMER_TYPE_OPTIONS = [
   "단체",
   "개인",
@@ -34,7 +37,6 @@ const CUSTOMER_TYPE_OPTIONS = [
   "학교",
   "학생",
   "헬스장",
-  "기타",
 ] as const;
 
 const WORK_TYPE_OPTIONS = [
@@ -46,17 +48,21 @@ const WORK_TYPE_OPTIONS = [
   "단체티셔츠",
   "작업조끼",
   "키링",
-  "기타",
 ] as const;
 
 const MAX_STRENGTH_PICKS = 5;
+const MAX_SUB_KEYWORDS = 3;
 
 function BlogPageContent() {
   const searchParams = useSearchParams();
   const [mainKeyword, setMainKeyword] = useState("");
-  /** 쉼표로 구분. 비우면 AI가 서브 키워드만 제안 */
-  const [extraKeywords, setExtraKeywords] = useState("");
-  const [customerType, setCustomerType] = useState<string>(CUSTOMER_TYPE_OPTIONS[0]);
+  const [subKeywordPool, setSubKeywordPool] = useState<string[]>([]);
+  const [selectedSubKeywords, setSelectedSubKeywords] = useState<string[]>([]);
+  const [suggestLoading, setSuggestLoading] = useState(false);
+  /** 추천 API를 호출했을 때의 메인 키워드 — 수정 후 블러 시 비교해 풀 초기화 */
+  const [lastSuggestedMain, setLastSuggestedMain] = useState("");
+  const [customerType, setCustomerType] = useState<string>(CUSTOMER_TYPE_OPTIONS[0] as string);
+  const [customerTypeCustom, setCustomerTypeCustom] = useState("");
   const [workType, setWorkType] = useState<string>(WORK_TYPE_OPTIONS[0]);
   const [workTypeCustom, setWorkTypeCustom] = useState("");
   const [strengths, setStrengths] = useState<string[]>([]);
@@ -74,6 +80,45 @@ function BlogPageContent() {
     if (q?.trim()) setMainKeyword(q.trim());
   }, [searchParams]);
 
+  const toggleSubKeyword = (k: string) => {
+    setSelectedSubKeywords((prev) => {
+      if (prev.includes(k)) return prev.filter((x) => x !== k);
+      if (prev.length >= MAX_SUB_KEYWORDS) return prev;
+      return [...prev, k];
+    });
+  };
+
+  const fetchSubKeywordSuggestions = async () => {
+    if (!mainKeyword.trim()) {
+      setError("메인 키워드를 먼저 입력해 주세요.");
+      return;
+    }
+    setSuggestLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/blog/suggest-subkeywords", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mainKeyword: mainKeyword.trim(),
+          region: region.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || "서브 키워드 추천에 실패했습니다.");
+        return;
+      }
+      setSubKeywordPool(data.suggestions ?? []);
+      setSelectedSubKeywords([]);
+      setLastSuggestedMain(mainKeyword.trim());
+    } catch {
+      setError("네트워크 오류가 났습니다. 다시 시도해 주세요.");
+    } finally {
+      setSuggestLoading(false);
+    }
+  };
+
   const toggleStrength = (id: string) => {
     setStrengths((prev) => {
       if (prev.includes(id)) return prev.filter((s) => s !== id);
@@ -89,24 +134,38 @@ function BlogPageContent() {
       setError("스토리 내용을 입력해 주세요.");
       return;
     }
+    if (customerType === SELECT_OTHER && !customerTypeCustom.trim()) {
+      setError("고객 유형이 기타일 때 유형을 직접 입력해 주세요.");
+      return;
+    }
+    if (workType === SELECT_OTHER && !workTypeCustom.trim()) {
+      setError("작업·품목이 기타일 때 품목을 직접 입력해 주세요.");
+      return;
+    }
+    if (subKeywordPool.length !== 5) {
+      setError("메인 키워드 입력 후 「확정」을 눌러 참고 키워드 5개를 만든 뒤 진행해 주세요.");
+      return;
+    }
+    if (selectedSubKeywords.length < 1 || selectedSubKeywords.length > MAX_SUB_KEYWORDS) {
+      setError(`참고 키워드는 1~${MAX_SUB_KEYWORDS}개 선택해 주세요.`);
+      return;
+    }
     setError(null);
     setResult(null);
     setLoading(true);
-    const subKeywords = extraKeywords
-      .split(/[,，]/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .slice(0, 5);
     try {
       const res = await fetch("/api/blog/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mainKeyword: mainKeyword.trim(),
-          subKeywords,
-          customerType,
-          workType,
-          workTypeCustom: workTypeCustom.trim(),
+          subKeywords: selectedSubKeywords,
+          subKeywordPool,
+          customerType: customerType === SELECT_OTHER ? "기타" : customerType,
+          customerTypeCustom:
+            customerType === SELECT_OTHER ? customerTypeCustom.trim() : undefined,
+          workType: workType === SELECT_OTHER ? "기타" : workType,
+          workTypeCustom: workType === SELECT_OTHER ? workTypeCustom.trim() : undefined,
           strengths,
           customStrength: customStrength.trim(),
           region: region.trim(),
@@ -163,30 +222,79 @@ function BlogPageContent() {
           <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-700 mb-1">키워드</h2>
             <p className="text-xs text-slate-500 mb-4">
-              서브 키워드는 비워도 됩니다. AI가 메인 키워드로 5개를 제안하고, 그중 3개를 골라 본문에 씁니다.
+              메인 키워드를 입력하고 「확정」을 누르면 아래 <strong className="text-slate-600">참고 키워드</strong> 5개가 만들어집니다. 그중 블로그 본문에 쓸 키워드를 1~3개 고른 뒤 글을 생성하세요. 확정 후 메인 키워드를 바꾸고 입력칸을 벗어나면 목록이 초기화됩니다.
             </p>
-            <div className="space-y-3">
-              <label className="block">
-                <span className="text-xs text-slate-500">메인 키워드 (필수)</span>
-                <input
-                  type="text"
-                  value={mainKeyword}
-                  onChange={(e) => setMainKeyword(e.target.value)}
-                  placeholder="예: 스티커 제작"
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
-                  required
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs text-slate-500">참고 키워드 (선택, 쉼표로 구분)</span>
-                <input
-                  type="text"
-                  value={extraKeywords}
-                  onChange={(e) => setExtraKeywords(e.target.value)}
-                  placeholder="예: 단체조끼, 로고인쇄, 부산"
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
-                />
-              </label>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="block">
+                  <span className="text-xs text-slate-500">메인 키워드 (필수)</span>
+                  <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-stretch sm:gap-3">
+                    <input
+                      type="text"
+                      value={mainKeyword}
+                      onChange={(e) => setMainKeyword(e.target.value)}
+                      onBlur={() => {
+                        const t = mainKeyword.trim();
+                        if (lastSuggestedMain && t !== lastSuggestedMain) {
+                          setSubKeywordPool([]);
+                          setSelectedSubKeywords([]);
+                          setLastSuggestedMain("");
+                        }
+                      }}
+                      placeholder="예: 작업조끼 인쇄"
+                      className="w-full min-w-0 flex-1 border-2 border-slate-300 rounded-lg px-3 py-2.5 text-base sm:text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={fetchSubKeywordSuggestions}
+                      disabled={suggestLoading || !mainKeyword.trim()}
+                      className="w-full sm:w-auto sm:min-w-[7.5rem] shrink-0 inline-flex items-center justify-center px-6 py-2.5 rounded-lg text-sm font-bold bg-emerald-600 text-white shadow-md hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-45 disabled:cursor-not-allowed border-2 border-emerald-700/30"
+                    >
+                      {suggestLoading ? "만드는 중…" : "확정"}
+                    </button>
+                  </div>
+                </label>
+                <p className="text-[11px] text-slate-500">
+                  메인 키워드 입력 후 <span className="font-semibold text-emerald-700">확정</span>을 누르면 아래에 참고 키워드 5개가 나옵니다.
+                </p>
+              </div>
+
+              {subKeywordPool.length === 5 && (
+                <div className="pt-3 border-t border-slate-200">
+                  <h3 className="text-sm font-semibold text-slate-800 mb-1">참고 키워드</h3>
+                  <p className="text-xs text-slate-500 mb-3">
+                    본문에 넣을 키워드를 <strong className="text-slate-600">1~3개</strong> 선택하세요. (최대 {MAX_SUB_KEYWORDS}개)
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {subKeywordPool.map((k) => {
+                      const selected = selectedSubKeywords.includes(k);
+                      const atMax = selectedSubKeywords.length >= MAX_SUB_KEYWORDS && !selected;
+                      return (
+                        <label
+                          key={k}
+                          className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors ${
+                            atMax
+                              ? "border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed"
+                              : selected
+                                ? "border-blue-500 bg-blue-50 text-blue-900 cursor-pointer"
+                                : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 cursor-pointer"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            disabled={atMax}
+                            onChange={() => toggleSubKeyword(k)}
+                            className="rounded border-slate-300 disabled:opacity-40"
+                          />
+                          {k}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           </section>
 
@@ -209,6 +317,7 @@ function BlogPageContent() {
                         {option}
                       </option>
                     ))}
+                    <option value={SELECT_OTHER}>기타</option>
                   </select>
                 </label>
                 <label className="block">
@@ -222,6 +331,18 @@ function BlogPageContent() {
                   />
                 </label>
               </div>
+              {customerType === SELECT_OTHER && (
+                <label className="block rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                  <span className="text-xs font-medium text-amber-900">고객 유형 직접 입력 (기타)</span>
+                  <input
+                    type="text"
+                    value={customerTypeCustom}
+                    onChange={(e) => setCustomerTypeCustom(e.target.value)}
+                    placeholder="예: 청소 전문 업체, 동네 카페 체인"
+                    className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
+                  />
+                </label>
+              )}
               <label className="block">
                 <span className="text-xs text-slate-500">작업 · 품목</span>
                 <select
@@ -234,17 +355,18 @@ function BlogPageContent() {
                       {option}
                     </option>
                   ))}
+                  <option value={SELECT_OTHER}>기타</option>
                 </select>
               </label>
-              {workType === "기타" && (
-                <label className="block">
-                  <span className="text-xs text-slate-500">품목 직접 입력</span>
+              {workType === SELECT_OTHER && (
+                <label className="block rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+                  <span className="text-xs font-medium text-amber-900">품목 직접 입력 (기타)</span>
                   <input
                     type="text"
                     value={workTypeCustom}
                     onChange={(e) => setWorkTypeCustom(e.target.value)}
                     placeholder="예: 아크릴 굿즈, 안내판"
-                    className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
+                    className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 bg-white"
                   />
                 </label>
               )}
@@ -272,6 +394,9 @@ function BlogPageContent() {
               </div>
               <label className="block">
                 <span className="text-xs text-slate-500">강점 한 줄 메모 (선택)</span>
+                <p className="text-xs text-slate-500 mt-0.5 mb-1">
+                  체크한 강점과 동일하게 본문에 키워드로 녹입니다. 쉼표로 여러 개 적어도 됩니다.
+                </p>
                 <input
                   type="text"
                   value={customStrength}
@@ -298,7 +423,10 @@ function BlogPageContent() {
           </section>
 
           <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4">글 길이 · 말투</h2>
+            <h2 className="text-sm font-semibold text-slate-700 mb-1">글 길이 · 말투</h2>
+            <p className="text-xs text-slate-500 mb-4">
+              본문은 선택한 글자 수 기준 <strong className="text-slate-600">±5%</strong> 범위로 맞춰 생성합니다.
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="block">
                 <span className="text-xs text-slate-500">글 길이</span>
@@ -369,8 +497,8 @@ function BlogPageContent() {
             </section>
 
             <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-700 mb-3">서브 키워드 추천/선택</h2>
-              <p className="text-xs text-slate-500 mb-2">추천 5개</p>
+              <h2 className="text-sm font-semibold text-slate-700 mb-3">서브 키워드 (추천 풀 · 본문 반영)</h2>
+              <p className="text-xs text-slate-500 mb-2">추천 5개 풀</p>
               <div className="flex flex-wrap gap-2 mb-4">
                 {result.subKeywordSuggestions.map((k, i) => (
                   <span key={`${k}-${i}`} className="px-2 py-1 bg-slate-100 rounded text-sm text-slate-700">
@@ -378,7 +506,7 @@ function BlogPageContent() {
                   </span>
                 ))}
               </div>
-              <p className="text-xs text-slate-500 mb-2">본문 반영 3개</p>
+              <p className="text-xs text-slate-500 mb-2">선택하여 본문에 반영한 키워드</p>
               <div className="flex flex-wrap gap-2">
                 {result.selectedSubKeywords.map((k, i) => (
                   <span key={`${k}-${i}`} className="px-2 py-1 bg-blue-50 rounded text-sm text-blue-700">
