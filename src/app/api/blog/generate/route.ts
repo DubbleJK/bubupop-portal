@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import {
-  INDUSTRY_OPTIONS,
-  STRENGTH_OPTIONS,
-  TONE_OPTIONS,
-} from "@/lib/blog/templates";
+import { INDUSTRY_OPTIONS, TONE_OPTIONS } from "@/lib/blog/templates";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY ?? "",
@@ -19,7 +15,8 @@ export interface GenerateBody {
   /** UI에서 제거됨 — 없으면 작업 종류로 추론 */
   industryId?: string;
   industryCustom?: string;
-  strengths: string[];
+  /** 구 API 호환 — 무시됨 */
+  strengths?: string[];
   customStrength?: string;
   customerType?: string;
   /** 고객 유형이 "기타"일 때 직접 입력 */
@@ -36,12 +33,6 @@ export interface GenerateBody {
 
 function getIndustryLabel(id: string): string {
   return INDUSTRY_OPTIONS.find((o) => o.id === id)?.label ?? id;
-}
-
-function getStrengthLabels(ids: string[]): string[] {
-  return ids
-    .map((id) => STRENGTH_OPTIONS.find((o) => o.id === id)?.label)
-    .filter(Boolean) as string[];
 }
 
 function getToneLabel(id: string): string {
@@ -98,8 +89,6 @@ export async function POST(request: Request) {
     subKeywordPool,
     industryId,
     industryCustom,
-    strengths,
-    customStrength,
     customerType,
     customerTypeCustom,
     workType,
@@ -164,13 +153,6 @@ export async function POST(request: Request) {
     industryId?.trim() || deriveIndustryIdFromWorkType(workType, workTypeCustom);
   const industryLabel =
     industryCustom?.trim() || getIndustryLabel(resolvedIndustryId);
-  const strengthCheckboxLabels = getStrengthLabels(strengths);
-  const customMemo = customStrength?.trim() ?? "";
-  const strengthHintMerged =
-    [
-      ...strengthCheckboxLabels,
-      ...(customMemo ? [customMemo] : []),
-    ].join(" · ") || "(강점 미선택 — 스토리에서 자연스럽게 드러나는 장점만 쓸 것)";
   const toneLabel = getToneLabel(toneId);
   const lengthRange = lengthRangeFor(length);
   const ct = customerType?.trim() || "";
@@ -191,23 +173,21 @@ export async function POST(request: Request) {
 - "${toneLabel}" 톤을 기준으로 **해요체·했어요체**를 충분히 써서 블로그답게 읽히게 하되, **합니다체**도 섞어 신뢰감을 유지한다. (해요체만으로 끝까지 가지도, 보고서체만으로 가지도 않는다.)
 - 독자에게 말 거는 느낌(물음표 1~2회, 공감 한마디, 상담 장면 한 컷)은 **적극 허용**한다. 허위·검증 불가 주장은 금지.
 - "완벽한" "최고의" "확실한" 같은 표현은 **문서 전체에서 남발하지 말고** 정말 쓸 곳에만 1회 정도.
-- "저희는" "또한"으로 문단을 연달아 시작하지 않는다. 강점·혜택은 **광고 전단처럼 한 문단에 몰지 말고** 스토리 속에 1~2가지만 녹인다.
+- "저희는" "또한"으로 문단을 연달아 시작하지 않는다. 장점·혜택은 **광고 전단처럼 한 문단에 몰지 말고** 스토리 속에서 자연스럽게만 드러낸다.
 - 문장 길이를 섞고, 가볍게 읽히는 리듬을 유지한다.
 
 [브랜드]
 - 본문 서두(첫 번째 \`###\` 소제목 이전, 1~2문단)에서 브랜드명을 자연스럽게 1회 이상 소개한다.
 
 [스토리 원문 — 최우선]
-- 입력에 \`[고객 상황]\` \`[걱정·문의]\` \`[기억에 남는 장면]\` \`[고객 칭찬·반응]\` \`[추가 메모]\` 같은 머리글이 붙어 있을 수 있다. **각 블록 내용을 모두 활용**하되, 본문에 머리글 문자열을 그대로 출력하지 않는다.
-- 스토리의 구체 정보(누가, 무엇을, 왜, 감정, 칭찬)를 반영한다. 없는 사실·대화·수치를 지어내지 않는다.
-- "(스토리 입력 없음)"이면 독자 공감형 일반 서술로 시작한다.
+- 입력에 \`[고객 상황]\` \`[걱정·문의]\` \`[기억에 남는 장면]\` \`[고객 칭찬·반응]\` \`[추가 메모]\` 머리글이 붙어 있을 수 있다. 본문에 머리글 문자열을 그대로 출력하지 않는다.
+- **반드시 우선 반영:** \`[고객 상황]\` \`[걱정·문의]\` \`[기억에 남는 장면]\` 세 블록에 적힌 내용은 글의 **도입·갈등·전개**의 축으로 삼는다. 비어 있지 않으면 서론·본문 1~2섹션·사례 묘사에 **구체적으로** 녹인다.
+- \`[고객 칭찬·반응]\` \`[추가 메모]\` 가 있으면 신뢰·디테일로 활용한다.
+- 없는 사실·대화·수치를 지어내지 않는다. "(스토리 입력 없음)"이면 독자 공감형 일반 서술로 시작한다.
 - 매번 같은 뼈대 문장을 쓰지 말고 스토리에 맞게 구조를 바꾼다.
 
 [서브 키워드]
 - 사용자가 선택한 참고 키워드(1~3개)는 각각 본문에 최소 1회 자연스럽게 녹인다.
-
-[강점·메모]
-- 체크박스 강점 라벨은 각각 문맥에 녹인다. 강점 한 줄 메모 문구는 체크박스와 동일 비중으로 반영한다(쉼표로 여러 개면 각각 등장). 나열 금지, 의미 겹치면 한 테마로 합친다.
 
 [제목 titleCandidates 3개 — 본문과 별개, 홈쇼핑 방송 자막 체]
 - **본문 톤과 무관하게**, 제목 3개만 **텔레홈쇼핑·특가 방송 자막**처럼 눈에 확 들어오게 쓴다. (본문은 아래 [톤·문체]를 따른다.)
@@ -253,10 +233,7 @@ export async function POST(request: Request) {
 - 사용자 선택 참고 키워드 1~3개(각각 본문에 최소 1회): ${chosenSubKeywords.join(", ")}
 - 고객유형: ${customerTypeLabel}
 - 작업·품목: ${workTypeLabel}
-- 체크박스 강점 라벨: ${strengthCheckboxLabels.join(", ") || "(없음)"}
-- 강점 한 줄 메모(있으면 체크박스와 동일 비중으로 본문 키워드 반영): ${customMemo || "(없음)"}
-- 강점 통합 참고(나열용이 아님): ${strengthHintMerged}
-- 스토리원문(아래는 사용자가 항목별로 적었을 수 있음. 대괄호 머리글은 구분용이며 글에 그대로 노출하지 말 것): ${storyText}
+- 스토리원문(항목별 입력 가능. **[고객 상황][걱정·문의][기억에 남는 장면]** 내용을 본문에서 최우선으로 반영할 것. 머리글은 글에 노출 금지): ${storyText}
 - 목표글자수: ${length} — 이미지 안내 한 줄(문자열 그대로: 📷 굵게 처리한 「이곳에 이미지를 넣으세요.」)은 글자 수에서 0자로 치고, 그 외 본문만 공백·줄바꿈 제외 ${lengthRange.min}~${lengthRange.max}자
 - 지역: ${region || "(없음)"}
 - 말투·톤: "${toneLabel}" + 고객유형 "${customerTypeLabel}"
@@ -295,7 +272,7 @@ export async function POST(request: Request) {
     "ctaNoContactOrLinkLines": true,
     "bodyImagePlaceholdersAtLeast10": true,
     "subKeywordsEachUsedInBody": true,
-    "customStrengthMemoReflected": true
+    "storyCoreThreeBlocksReflected": true
   }
 }`;
 

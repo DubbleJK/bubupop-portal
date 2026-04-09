@@ -105,7 +105,7 @@ export default function DashboardPage() {
           <IconPenNotebook className={iconClass} />
           <div>
             <span className="text-lg font-semibold text-slate-800">네이버 SEO 블로그 작성</span>
-            <p className="text-sm text-slate-500 mt-1">키워드·업종 입력으로 블로그 글 자동 생성</p>
+            <p className="text-sm text-slate-500 mt-1">키워드·스토리 입력으로 블로그 글 자동 생성</p>
           </div>
         </Link>
       </div>

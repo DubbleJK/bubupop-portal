@@ -3,11 +3,7 @@
 import { Suspense, useState, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import {
-  STRENGTH_OPTIONS,
-  LENGTH_OPTIONS,
-  TONE_OPTIONS,
-} from "@/lib/blog/templates";
+import { LENGTH_OPTIONS, TONE_OPTIONS } from "@/lib/blog/templates";
 
 interface BlogOutput {
   subKeywordSuggestions: string[];
@@ -49,7 +45,6 @@ const WORK_TYPE_OPTIONS = [
   "키링",
 ] as const;
 
-const MAX_STRENGTH_PICKS = 5;
 const MAX_SUB_KEYWORDS = 3;
 
 const MIN_STORY_CHARS = 30;
@@ -82,8 +77,6 @@ function BlogPageContent() {
   const [customerTypeCustom, setCustomerTypeCustom] = useState("");
   const [workType, setWorkType] = useState<string>(WORK_TYPE_OPTIONS[0]);
   const [workTypeCustom, setWorkTypeCustom] = useState("");
-  const [strengths, setStrengths] = useState<string[]>([]);
-  const [customStrength, setCustomStrength] = useState("");
   const [region, setRegion] = useState("");
   const [storySituation, setStorySituation] = useState("");
   const [storyWorry, setStoryWorry] = useState("");
@@ -140,14 +133,6 @@ function BlogPageContent() {
     }
   };
 
-  const toggleStrength = (id: string) => {
-    setStrengths((prev) => {
-      if (prev.includes(id)) return prev.filter((s) => s !== id);
-      if (prev.length >= MAX_STRENGTH_PICKS) return prev;
-      return [...prev, id];
-    });
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mainKeyword.trim()) return;
@@ -194,8 +179,6 @@ function BlogPageContent() {
             customerType === SELECT_OTHER ? customerTypeCustom.trim() : undefined,
           workType: workType === SELECT_OTHER ? "기타" : workType,
           workTypeCustom: workType === SELECT_OTHER ? workTypeCustom.trim() : undefined,
-          strengths,
-          customStrength: customStrength.trim(),
           region: region.trim(),
           story: storyPayload,
           length,
@@ -397,105 +380,116 @@ function BlogPageContent() {
                   />
                 </label>
               )}
-              <div>
-                <span className="text-xs text-slate-500 block mb-1">
-                  강점 (최대 {MAX_STRENGTH_PICKS}개)
-                </span>
-                <p className="text-xs text-amber-700/90 mb-2">
-                  너무 많이 고르면 글이 &quot;체크리스트&quot;처럼 딱딱해질 수 있어요. 꼭 쓰고 싶은 것만 골라 주세요.
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {STRENGTH_OPTIONS.map((o) => (
-                    <label key={o.id} className="inline-flex items-center gap-1.5">
-                      <input
-                        type="checkbox"
-                        checked={strengths.includes(o.id)}
-                        onChange={() => toggleStrength(o.id)}
-                        disabled={!strengths.includes(o.id) && strengths.length >= MAX_STRENGTH_PICKS}
-                        className="rounded border-slate-300 disabled:opacity-40"
-                      />
-                      <span className="text-sm">{o.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <label className="block">
-                <span className="text-xs text-slate-500">강점 한 줄 메모 (선택)</span>
-                <p className="text-xs text-slate-500 mt-0.5 mb-1">
-                  체크한 강점과 동일하게 본문에 키워드로 녹입니다. 쉼표로 여러 개 적어도 됩니다.
-                </p>
-                <input
-                  type="text"
-                  value={customStrength}
-                  onChange={(e) => setCustomStrength(e.target.value)}
-                  placeholder="예: 여성기업 인증, AI 로고 복원 경험"
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2"
-                />
-              </label>
             </div>
           </section>
 
           <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-700 mb-1">스토리 원문</h2>
-            <p className="text-xs text-slate-500 mb-4">
-              아래 항목을 채우면 AI가 글을 쓸 때 참고합니다. <strong className="text-slate-600">꼭 다 채울 필요는 없고</strong>, 알려주실 수 있는 것만 적어 주세요. 합쳐 <strong className="text-slate-600">{MIN_STORY_CHARS}자 이상</strong>이면 됩니다.
+            <h2 className="text-base font-bold text-slate-800 mb-1">스토리 원문</h2>
+            <p className="text-xs text-slate-600 mb-4 leading-relaxed">
+              아래 <strong className="text-indigo-800">파란 박스 안 세 가지</strong>만 잘 적어 주셔도 글이 훨씬 살아납니다. 꼭 다 채울 필요는 없고, 합쳐 <strong>{MIN_STORY_CHARS}자 이상</strong>이면 됩니다.
             </p>
-            <div className="space-y-4">
-              <label className="block">
-                <span className="text-xs font-medium text-slate-700">고객 상황</span>
-                <span className="text-xs text-slate-500 block mt-0.5">누가 맡기셨는지, 무엇이 필요했는지, 일정·급한 점 등</span>
-                <textarea
-                  value={storySituation}
-                  onChange={(e) => setStorySituation(e.target.value)}
-                  placeholder="예: 관공서 담당자분, 현장용 작업조끼 20벌, 로고는 작은 글씨까지 선명하게…"
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 min-h-[4.5rem] text-sm"
-                  rows={3}
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-slate-700">고객이 걱정하거나 물어본 점</span>
-                <span className="text-xs text-slate-500 block mt-0.5">작은 로고, 파일 형식, 납기, 예산 등</span>
-                <textarea
-                  value={storyWorry}
-                  onChange={(e) => setStoryWorry(e.target.value)}
-                  placeholder="예: 작은 글씨가 뭉개질까 봐 걱정하셨다고…"
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 min-h-[4.5rem] text-sm"
-                  rows={3}
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-slate-700">상담·작업 중 기억에 남는 장면</span>
-                <span className="text-xs text-slate-500 block mt-0.5">디자인 수정, 파일 정리, 현장 대화 등</span>
-                <textarea
-                  value={storyScene}
-                  onChange={(e) => setStoryScene(e.target.value)}
-                  placeholder="예: 파일이 저해상도라 복원 작업을 먼저 설명드리고…"
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 min-h-[4.5rem] text-sm"
-                  rows={3}
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-slate-700">고객이 칭찬하거나 반응한 부분</span>
-                <span className="text-xs text-slate-500 block mt-0.5">실제로 하신 말씀이 있으면 그대로 적어 주세요</span>
-                <textarea
-                  value={storyPraise}
-                  onChange={(e) => setStoryPraise(e.target.value)}
-                  placeholder="예: 이렇게 깔끔할 줄 몰랐다고 하시며…"
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 min-h-[4.5rem] text-sm"
-                  rows={3}
-                />
-              </label>
-              <label className="block">
-                <span className="text-xs font-medium text-slate-700">글에 꼭 넣고 싶은 디테일 (선택)</span>
-                <span className="text-xs text-slate-500 block mt-0.5">색상, 수량, 특이 사항 등</span>
-                <textarea
-                  value={storyExtra}
-                  onChange={(e) => setStoryExtra(e.target.value)}
-                  placeholder="예: 네이비 조끼, 가슴 왼쪽 로고만…"
-                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 min-h-[3.5rem] text-sm"
-                  rows={2}
-                />
-              </label>
+
+            <div className="rounded-xl border-2 border-indigo-400 bg-gradient-to-b from-indigo-50/90 to-white p-4 md:p-5 shadow-md ring-4 ring-indigo-100/80">
+              <div className="flex items-start gap-2 mb-3">
+                <span className="text-lg leading-none" aria-hidden>✏️</span>
+                <div>
+                  <p className="text-sm md:text-base font-extrabold text-indigo-950 tracking-tight">
+                    글의 뼈대 — 이 세 가지를 특히 적어 주세요
+                  </p>
+                  <p className="text-xs md:text-sm text-indigo-900/85 mt-1 font-medium">
+                    <strong>상황</strong> → <strong>걱정·질문</strong> → <strong>현장 장면</strong> 순으로 적으면 AI가 도입·갈등·전개를 잡기 쉽습니다.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-5">
+                <label className="block">
+                  <span className="inline-flex items-center gap-2 text-sm md:text-base font-bold text-indigo-950">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-black text-white">
+                      1
+                    </span>
+                    고객 상황
+                  </span>
+                  <span className="text-xs md:text-sm text-indigo-900/80 block mt-1.5 pl-0 md:pl-9 font-medium">
+                    누가 맡기셨는지, 무엇이 필요했는지, 일정·급한 점까지
+                  </span>
+                  <textarea
+                    value={storySituation}
+                    onChange={(e) => setStorySituation(e.target.value)}
+                    placeholder="예: 관공서 담당자분, 현장용 작업조끼 20벌, 로고는 작은 글씨까지 선명하게…"
+                    className="mt-2 w-full rounded-lg border-2 border-indigo-200 bg-white px-3 py-3 text-sm md:text-base shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-300 min-h-[5.5rem]"
+                    rows={4}
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="inline-flex items-center gap-2 text-sm md:text-base font-bold text-indigo-950">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-black text-white">
+                      2
+                    </span>
+                    고객이 걱정하거나 물어본 점
+                  </span>
+                  <span className="text-xs md:text-sm text-indigo-900/80 block mt-1.5 pl-0 md:pl-9 font-medium">
+                    작은 로고, 파일, 납기, 예산 등 — 실제로 하신 말이 있으면 그대로
+                  </span>
+                  <textarea
+                    value={storyWorry}
+                    onChange={(e) => setStoryWorry(e.target.value)}
+                    placeholder="예: 작은 글씨가 뭉개질까 봐 걱정하셨다고…"
+                    className="mt-2 w-full rounded-lg border-2 border-indigo-200 bg-white px-3 py-3 text-sm md:text-base shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-300 min-h-[5.5rem]"
+                    rows={4}
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="inline-flex items-center gap-2 text-sm md:text-base font-bold text-indigo-950">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-black text-white">
+                      3
+                    </span>
+                    상담·작업 중 기억에 남는 장면
+                  </span>
+                  <span className="text-xs md:text-sm text-indigo-900/80 block mt-1.5 pl-0 md:pl-9 font-medium">
+                    디자인 수정, 파일 설명, 현장 대화 등 머릿속에 남는 한 장면
+                  </span>
+                  <textarea
+                    value={storyScene}
+                    onChange={(e) => setStoryScene(e.target.value)}
+                    placeholder="예: 파일이 저해상도라 복원 작업을 먼저 설명드리고…"
+                    className="mt-2 w-full rounded-lg border-2 border-indigo-200 bg-white px-3 py-3 text-sm md:text-base shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-300 min-h-[5.5rem]"
+                    rows={4}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-5 pt-4 border-t-2 border-dashed border-slate-200">
+              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-3">
+                더 있으면 적어 주세요 (선택)
+              </p>
+              <div className="space-y-4">
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-800">고객이 칭찬하거나 반응한 부분</span>
+                  <span className="text-xs text-slate-500 block mt-0.5">실제 말씀이 있으면 그대로</span>
+                  <textarea
+                    value={storyPraise}
+                    onChange={(e) => setStoryPraise(e.target.value)}
+                    placeholder="예: 이렇게 깔끔할 줄 몰랐다고 하시며…"
+                    className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 min-h-[4rem] text-sm"
+                    rows={3}
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-sm font-semibold text-slate-800">글에 꼭 넣고 싶은 디테일</span>
+                  <span className="text-xs text-slate-500 block mt-0.5">색상, 수량, 특이 사항 등</span>
+                  <textarea
+                    value={storyExtra}
+                    onChange={(e) => setStoryExtra(e.target.value)}
+                    placeholder="예: 네이비 조끼, 가슴 왼쪽 로고만…"
+                    className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 min-h-[3.5rem] text-sm"
+                    rows={2}
+                  />
+                </label>
+              </div>
             </div>
           </section>
 
