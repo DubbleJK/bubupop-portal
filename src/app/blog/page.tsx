@@ -52,6 +52,24 @@ const WORK_TYPE_OPTIONS = [
 const MAX_STRENGTH_PICKS = 5;
 const MAX_SUB_KEYWORDS = 3;
 
+const MIN_STORY_CHARS = 30;
+
+function buildStoryPayload(parts: {
+  situation: string;
+  worry: string;
+  scene: string;
+  praise: string;
+  extra: string;
+}): string {
+  const blocks: string[] = [];
+  if (parts.situation.trim()) blocks.push(`[고객 상황]\n${parts.situation.trim()}`);
+  if (parts.worry.trim()) blocks.push(`[걱정·문의]\n${parts.worry.trim()}`);
+  if (parts.scene.trim()) blocks.push(`[기억에 남는 장면]\n${parts.scene.trim()}`);
+  if (parts.praise.trim()) blocks.push(`[고객 칭찬·반응]\n${parts.praise.trim()}`);
+  if (parts.extra.trim()) blocks.push(`[추가 메모]\n${parts.extra.trim()}`);
+  return blocks.join("\n\n");
+}
+
 function BlogPageContent() {
   const searchParams = useSearchParams();
   const [mainKeyword, setMainKeyword] = useState("");
@@ -67,7 +85,11 @@ function BlogPageContent() {
   const [strengths, setStrengths] = useState<string[]>([]);
   const [customStrength, setCustomStrength] = useState("");
   const [region, setRegion] = useState("");
-  const [story, setStory] = useState("");
+  const [storySituation, setStorySituation] = useState("");
+  const [storyWorry, setStoryWorry] = useState("");
+  const [storyScene, setStoryScene] = useState("");
+  const [storyPraise, setStoryPraise] = useState("");
+  const [storyExtra, setStoryExtra] = useState("");
   const [length, setLength] = useState<1000 | 1500 | 2000>(1500);
   const [toneId, setToneId] = useState<string>(TONE_OPTIONS[0].id);
   const [result, setResult] = useState<BlogOutput | null>(null);
@@ -129,8 +151,15 @@ function BlogPageContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!mainKeyword.trim()) return;
-    if (!story.trim()) {
-      setError("스토리 내용을 입력해 주세요.");
+    const storyPayload = buildStoryPayload({
+      situation: storySituation,
+      worry: storyWorry,
+      scene: storyScene,
+      praise: storyPraise,
+      extra: storyExtra,
+    });
+    if (storyPayload.trim().length < MIN_STORY_CHARS) {
+      setError(`스토리 항목에 합쳐서 최소 ${MIN_STORY_CHARS}자 이상 적어 주세요. (비어 있는 칸은 괜찮습니다.)`);
       return;
     }
     if (customerType === SELECT_OTHER && !customerTypeCustom.trim()) {
@@ -168,7 +197,7 @@ function BlogPageContent() {
           strengths,
           customStrength: customStrength.trim(),
           region: region.trim(),
-          story: story.trim(),
+          story: storyPayload,
           length,
           toneId,
         }),
@@ -407,23 +436,73 @@ function BlogPageContent() {
           </section>
 
           <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-700 mb-4">스토리 원문</h2>
-            <label className="block">
-              <span className="text-xs text-slate-500">실제 고객 상황/감정/요청 내용을 자세히 입력</span>
-              <textarea
-                value={story}
-                onChange={(e) => setStory(e.target.value)}
-                placeholder="예: 행사 일정이 이틀 남아 급하게 단체티를 준비해야 했고, 이전 업체는 답변이 늦어서..."
-                className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 min-h-40"
-                required
-              />
-            </label>
+            <h2 className="text-sm font-semibold text-slate-700 mb-1">스토리 원문</h2>
+            <p className="text-xs text-slate-500 mb-4">
+              아래 항목을 채우면 AI가 글을 쓸 때 참고합니다. <strong className="text-slate-600">꼭 다 채울 필요는 없고</strong>, 알려주실 수 있는 것만 적어 주세요. 합쳐 <strong className="text-slate-600">{MIN_STORY_CHARS}자 이상</strong>이면 됩니다.
+            </p>
+            <div className="space-y-4">
+              <label className="block">
+                <span className="text-xs font-medium text-slate-700">고객 상황</span>
+                <span className="text-xs text-slate-500 block mt-0.5">누가 맡기셨는지, 무엇이 필요했는지, 일정·급한 점 등</span>
+                <textarea
+                  value={storySituation}
+                  onChange={(e) => setStorySituation(e.target.value)}
+                  placeholder="예: 관공서 담당자분, 현장용 작업조끼 20벌, 로고는 작은 글씨까지 선명하게…"
+                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 min-h-[4.5rem] text-sm"
+                  rows={3}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-700">고객이 걱정하거나 물어본 점</span>
+                <span className="text-xs text-slate-500 block mt-0.5">작은 로고, 파일 형식, 납기, 예산 등</span>
+                <textarea
+                  value={storyWorry}
+                  onChange={(e) => setStoryWorry(e.target.value)}
+                  placeholder="예: 작은 글씨가 뭉개질까 봐 걱정하셨다고…"
+                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 min-h-[4.5rem] text-sm"
+                  rows={3}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-700">상담·작업 중 기억에 남는 장면</span>
+                <span className="text-xs text-slate-500 block mt-0.5">디자인 수정, 파일 정리, 현장 대화 등</span>
+                <textarea
+                  value={storyScene}
+                  onChange={(e) => setStoryScene(e.target.value)}
+                  placeholder="예: 파일이 저해상도라 복원 작업을 먼저 설명드리고…"
+                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 min-h-[4.5rem] text-sm"
+                  rows={3}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-700">고객이 칭찬하거나 반응한 부분</span>
+                <span className="text-xs text-slate-500 block mt-0.5">실제로 하신 말씀이 있으면 그대로 적어 주세요</span>
+                <textarea
+                  value={storyPraise}
+                  onChange={(e) => setStoryPraise(e.target.value)}
+                  placeholder="예: 이렇게 깔끔할 줄 몰랐다고 하시며…"
+                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 min-h-[4.5rem] text-sm"
+                  rows={3}
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-medium text-slate-700">글에 꼭 넣고 싶은 디테일 (선택)</span>
+                <span className="text-xs text-slate-500 block mt-0.5">색상, 수량, 특이 사항 등</span>
+                <textarea
+                  value={storyExtra}
+                  onChange={(e) => setStoryExtra(e.target.value)}
+                  placeholder="예: 네이비 조끼, 가슴 왼쪽 로고만…"
+                  className="mt-1 w-full border border-slate-300 rounded-lg px-3 py-2 min-h-[3.5rem] text-sm"
+                  rows={2}
+                />
+              </label>
+            </div>
           </section>
 
           <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-700 mb-1">글 길이 · 말투</h2>
             <p className="text-xs text-slate-500 mb-4">
-              본문은 선택한 글자 수 기준 <strong className="text-slate-600">±5%</strong> 범위로 맞춰 생성합니다.
+              본문은 선택한 글자 수 기준 <strong className="text-slate-600">±5%</strong>로 맞춥니다. 본문에 들어가는 「📷 이곳에 이미지를 넣으세요.」 안내 줄은 <strong className="text-slate-600">글자 수에 포함되지 않습니다</strong>.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="block">
@@ -529,7 +608,7 @@ function BlogPageContent() {
                 {result.body}
               </div>
               <p className="mt-2 text-xs text-slate-500">
-                약 {result.body.length}자 · 본문 안의 「📷 이곳에 이미지를 넣으세요.」 안내를 블로그 편집기에서 실제 이미지로 바꿔 주세요.
+                전체 {result.body.length}자(줄바꿈 포함) · 이미지 안내 줄은 글자 수 목표에서 제외해 생성됩니다. 해당 문구는 편집기에서 실제 이미지로 바꿔 주세요.
               </p>
             </section>
 
