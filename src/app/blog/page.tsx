@@ -14,7 +14,6 @@ interface BlogOutput {
   selectedSubKeywords: string[];
   titleCandidates: { type: string; title: string }[];
   body: string;
-  imageGuide: { position: string; description: string; purpose: string; altText: string }[];
   metaDescription: string;
   hashtags: string[];
   storyReflectionChecklist?: {
@@ -184,7 +183,6 @@ function BlogPageContent() {
         selectedSubKeywords: data.selectedSubKeywords ?? [],
         titleCandidates: data.titleCandidates ?? [],
         body: data.body ?? "",
-        imageGuide: data.imageGuide ?? [],
         metaDescription: data.metaDescription ?? "",
         hashtags: data.hashtags ?? [],
         storyReflectionChecklist: data.storyReflectionChecklist ?? null,
@@ -530,21 +528,9 @@ function BlogPageContent() {
               <div className="whitespace-pre-wrap text-sm text-slate-700 leading-relaxed border border-slate-200 rounded-lg p-4 bg-slate-50 max-h-[480px] overflow-y-auto">
                 {result.body}
               </div>
-              <p className="mt-2 text-xs text-slate-500">약 {result.body.length}자</p>
-            </section>
-
-            <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-700 mb-3">이미지 가이드</h2>
-              <div className="space-y-3">
-                {result.imageGuide.map((img, i) => (
-                  <div key={`${img.position}-${i}`} className="rounded-lg border border-slate-200 p-3 bg-slate-50">
-                    <p className="text-xs text-slate-500">{img.position}</p>
-                    <p className="text-sm text-slate-800 mt-1">{img.description}</p>
-                    <p className="text-xs text-slate-600 mt-1">의도: {img.purpose}</p>
-                    <p className="text-xs text-slate-600 mt-1">ALT: {img.altText}</p>
-                  </div>
-                ))}
-              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                약 {result.body.length}자 · 본문 안의 「📷 이곳에 이미지를 넣으세요.」 안내를 블로그 편집기에서 실제 이미지로 바꿔 주세요.
+              </p>
             </section>
 
             <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">

@@ -77,13 +77,6 @@ function lengthRangeFor(target: 1000 | 1500 | 2000): { min: number; max: number 
 
 type TitleCandidate = { type: "정보형" | "사례형" | "문제해결형"; title: string };
 
-type ImageGuideItem = {
-  position: string;
-  description: string;
-  purpose: string;
-  altText: string;
-};
-
 export async function POST(request: Request) {
   if (!process.env.OPENAI_API_KEY) {
     return NextResponse.json(
@@ -131,7 +124,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          "서브 키워드 추천을 먼저 받아 주세요. 메인 키워드 입력 후 「서브 키워드 추천」을 눌러 5개 목록을 만든 뒤, 사용할 키워드를 선택하세요.",
+          "참고 키워드 5개가 필요합니다. 메인 키워드 입력 후 「확정」을 누른 뒤, 사용할 키워드를 선택하세요.",
       },
       { status: 400 }
     );
@@ -191,61 +184,54 @@ export async function POST(request: Request) {
       : workType?.trim() || industryLabel;
   const storyText = story?.trim() || "(스토리 입력 없음)";
 
-  const systemPrompt = `너는 네이버 SEO 블로그용 "브랜드 스토리텔링" 전문 카피라이터다.
-목표: 클릭을 부르는 제목, 읽기 쉬운 소제목·불릿, 생생한 사례, 마지막 CTA까지 한 흐름으로 완성한다.
+  const systemPrompt = `너는 네이버 SEO 기반 블로그 전문 카피라이터이자, 실제 제작 사례를 스토리텔링으로 설득력 있게 풀어내는 에디터다.
+목표는 "전문성 + 친근함 + 신뢰"가 함께 느껴지는 브랜드형 콘텐츠다. 과장된 홈쇼핑 톤, 남발하는 감탄사, 티 나는 광고 문구는 피한다.
 
-[톤·말맛 — 매우 중요]
-- 딱딱한 제안서/보도자료체 금지. "~습니다/~드립니다"만 잇따라 쓰지 말고, **해요체·했어요체·가끔은 짧은 반말 뉘앙스의 문장**을 섞어 블로그답게 쓴다.
-- "저희는", "또한,", "이에 따라", "많은 분들이"로 문단을 연속해서 시작하지 않는다. 문장 첫 표현을 매 섹션마다 바꾼다.
-- 독자에게 말 거는 느낌(물음표 1~2회, 완곡한 말버릇, 공감 한마디)을 허용한다. 과장·허위는 금지.
-- 인증·당일·예산·장비 같은 강점을 **한 문단에 나열해 광고 전단지처럼 읽히게 하지 말 것**. 스토리 흐름 속에서 1~2개만 자연스럽게.
+[톤·문체]
+- 딱딱한 보고서체·건조한 나열만 하지 말되, **해요체에만 치우치지 말고** "${toneLabel}" 톤과 고객 유형에 맞게 **합니다체와 해요체를 자연스럽게 섞는다**.
+- "저희는" "또한" "완벽한" "최상의" "확실한" 같은 표현을 남발하지 않는다. 문단 시작 패턴을 반복하지 않는다.
+- 체크리스트처럼 강점·혜택을 한꺼번에 쏟아내지 않는다. 스토리 흐름에 맞게 1~2가지만 녹인다.
+- "안녕하세요", 상담 현장 묘사, 짧은 문장과 중간 길이 문장을 섞어 읽기 편하게 쓴다.
 
 [브랜드]
-- 본문 서두(첫 번째 \`###\` 소제목 이전, 1~2문단)에서 브랜드명을 자연스럽게 1회 이상 소개한다. 브랜드명은 입력값으로 주어진다.
+- 본문 서두(첫 번째 \`###\` 소제목 이전, 1~2문단)에서 브랜드명을 자연스럽게 1회 이상 소개한다.
 
 [스토리 원문 — 최우선]
-- 스토리원문에 나온 구체 정보(누가, 무엇을, 왜, 어떤 말을 했는지, 감정)를 반드시 반영한다.
-- 스토리에 없는 사실·대화·수치를 지어내지 않는다. 비어 있거나 "(스토리 입력 없음)"이면 일반 상담 시나리오로만 쓰지 말고, 독자 공감형 일반 서술로 시작한다.
-- 매번 비슷한 뼈대 문장을 복붙하지 말고, 스토리 원문의 어휘·상황에 맞춰 문장 구조와 에피소드 순서를 바꾼다.
+- 스토리원문의 구체 정보(누가, 무엇을, 왜, 감정)를 반영한다. 없는 사실·대화·수치를 지어내지 않는다.
+- "(스토리 입력 없음)"이면 독자 공감형 일반 서술로 시작한다.
+- 매번 같은 뼈대 문장을 쓰지 말고 스토리에 맞게 구조를 바꾼다.
 
 [서브 키워드]
-- 사용자가 선택한 참고(서브) 키워드(보통 1~3개)는 각각 본문에 최소 1회씩 자연스럽게 녹인다. 억지 나열·한 문장에 몰아쓰기 금지.
+- 사용자가 선택한 참고 키워드(1~3개)는 각각 본문에 최소 1회 자연스럽게 녹인다.
 
-[강점 체크박스 vs 강점 한 줄 메모]
-- 체크박스로 받은 강점 "라벨" 각각: 본문에 키워드·주제로 최소 1회 이상 반영한다 (한 줄로 읽히게 나열하지 말고 문맥에 녹인다).
-- "강점 한 줄 메모"에 적힌 문구가 있으면, 체크박스 강점과 동일한 비중으로 본문에 반드시 반영한다. 메모에 쉼표로 여러 키워드가 있으면 각각이 본문 어딘가에 등장하도록 한다.
-- 의미가 겹치는 강점은 하나의 테마로 합쳐 서술한다.
+[강점·메모]
+- 체크박스 강점 라벨은 각각 문맥에 녹인다. 강점 한 줄 메모 문구는 체크박스와 동일 비중으로 반영한다(쉼표로 여러 개면 각각 등장). 나열 금지, 의미 겹치면 한 테마로 합친다.
 
 [제목 titleCandidates 3개]
-- 유형: 정보형 / 사례형 / 문제해결형 각 1개.
-- 패턴: 맨 앞에 대괄호 훅 — \`[메인키워드 또는 메인의 짧은 핵심]\` + 공백 + 클릭 유도 문구.
-- 메인키워드는 제목 본문에도 자연 포함 (대괄호 안 또는 뒤).
-- 길이 28~42자 내외.
+- 정보형 / 사례형 / 문제해결형 각 1개.
+- 맨 앞 \`[메인키워드 또는 짧은 핵심]\` + 공백 + 훅. 메인키워드 자연 포함. 28~42자 내외.
 
 [본문 body — 마크다운]
-- 첫머리: 인사 + 브랜드 소개 1~2문단 (## 전에 일반 문단으로).
-- 본문은 반드시 \`### 1. ...\`, \`### 2. ...\`, \`### 3. ...\` 형태의 번호 있는 소제목을 사용한다 (내용에 맞게 소제목 문구는 새로 짓는다).
-- 그 중 한 섹션은 서브 키워드·기술(DTF 등)·품질 중심으로, 불릿 목록을 쓴다. 불릿 각 줄에는 핵심 구를 **굵게** 1곳 이상 넣는다.
-- 마지막 CTA는 \`### 💡\` 로 시작하는 소제목을 쓴다. 아래를 포함한다:
-  · 독자 고민 번호 목록(1. 2. 3.) 3개
-  · \`* **상담 문의:** [네이버 톡톡 / 전화번호 입력]\`
-  · \`* **위치:** [지역 방문 상담 문구 — 지역 입력값 반영 가능 시 반영, 없으면 플레이스홀더]\`
-  · \`* **제작 사례 더 보기:** [인스타그램/블로그 링크]\`
-  · 한 줄 슬로건을 **굵게**로 마무리
-- 본문 끝에 해시태그 줄을 넣지 않는다 (해시태그는 JSON hashtags만).
+- 첫머리: 인사 + 브랜드 소개 1~2문단.
+- \`### 1.\` \`### 2.\` \`### 3.\` 번호 소제목 필수. 한 섹션은 불릿을 쓰되 과하지 않게; 필요한 줄만 **굵게**.
+- **이미지 삽입 안내(본문에만, JSON 별도 필드 없음):** 아래 문구를 **단독 한 줄**로 **정확히 10회 이상** 본문 안에 넣는다. 소제목 사이·문단 사이에 고르게 배치하고 연속 두 줄에 붙이지 않는다.
+  문구(그대로): \`📷 **이곳에 이미지를 넣으세요.**\`
+- 마지막 CTA: \`### 💡\` 로 시작하는 소제목 아래에 **독자 고민 번호 목록(1. 2. 3.)** 만 쓴다.
+- CTA 안에 **상담 문의·전화·톡톡·주소·위치·SNS·링크·플레이스홀더 문구는 절대 넣지 않는다.**
+- 번호 목록 다음에 **한 줄 슬로건**만 **굵게**로 마무리한다.
+- 본문 끝에 해시태그 줄 금지(JSON hashtags만).
 
 [본문 글자 수]
-- body 본문만 해당. 공백·줄바꿈 제외한 글자 수가 목표 ${length}자의 ±5% (${lengthRange.min}~${lengthRange.max}) 안에 들어가게 쓴다.
+- body만 해당. 공백·줄바꿈 제외 글자 수가 목표 ${length}자의 ±5% (${lengthRange.min}~${lengthRange.max}).
 
 [SEO·기타]
-- 메인키워드 본문(제목 제외) 총 4~6회 자연 포함.
-- 지역값이 있으면 제목 또는 서두에 최대 1회, 본문 전체 최대 2회.
-- DTF는 작업·품목 맥락에 맞을 때만 언급. 아니면 해당 공정에 맞는 표현으로 대체.
-- 내부용 블록 라벨(A 도입부 등) 금지.
-- 이미지 가이드 imageGuide는 최소 10개.
+- 메인키워드 본문(제목 제외) 4~6회 자연 포함.
+- 지역은 제목 또는 서두 최대 1회, 본문 전체 최대 2회.
+- DTF는 맥락에 맞을 때만.
+- 내부 블록 라벨 금지.
 
 [출력]
-설명 없이 JSON만 출력한다.`;
+설명 없이 JSON만 출력한다. imageGuide 필드는 출력하지 않는다.`;
 
   const userPrompt = `아래 입력값으로 작성하세요.
 
@@ -266,15 +252,18 @@ export async function POST(request: Request) {
   · 개인/단체 등: 친근함·편의성
   · 스토리에 급함이 있으면 대응 속도·소통을 자연스럽게
 
-[JSON 스키마 — 이 키만 출력]
+[재확인]
+- 본문에 \`📷 **이곳에 이미지를 넣으세요.**\` 를 10회 이상 단독 줄로 넣을 것.
+- CTA(### 💡)에는 고민 번호 3개 + 굵은 슬로건만. 상담/전화/톡톡/위치/SNS/링크 문구는 넣지 말 것.
+
+[JSON 스키마 — 이 키만 출력. imageGuide 키는 넣지 않는다.]
 {
   "titleCandidates": [
     {"type":"정보형","title":"..."},
     {"type":"사례형","title":"..."},
     {"type":"문제해결형","title":"..."}
   ],
-  "body": "마크다운 본문",
-  "imageGuide": [{"position":"B-2","description":"...","purpose":"...","altText":"..."}],
+  "body": "마크다운 본문(📷 **이곳에 이미지를 넣으세요.** 문구 10회 이상 포함)",
   "metaDescription": "...",
   "hashtags": ["...10개..."],
   "storyReflectionChecklist": {
@@ -289,7 +278,8 @@ export async function POST(request: Request) {
     "noOverclaimExpressions": true,
     "noBlockDuplication": true,
     "ctaPlacedAtEndingOnly": true,
-    "imageGuideCountOver10": true,
+    "ctaNoContactOrLinkLines": true,
+    "bodyImagePlaceholdersAtLeast10": true,
     "subKeywordsEachUsedInBody": true,
     "customStrengthMemoReflected": true
   }
@@ -302,7 +292,7 @@ export async function POST(request: Request) {
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      temperature: 0.92,
+      temperature: 0.88,
     });
 
     const content = completion.choices[0]?.message?.content?.trim();
@@ -321,7 +311,6 @@ export async function POST(request: Request) {
     const parsed = JSON.parse(jsonStr) as {
       titleCandidates?: unknown[];
       body?: string;
-      imageGuide?: unknown[];
       metaDescription?: string;
       hashtags?: unknown[];
       storyReflectionChecklist?: unknown;
@@ -361,39 +350,11 @@ export async function POST(request: Request) {
           .map((h) => (typeof h === "string" ? h.replace(/^#/, "") : String(h)))
       : [];
 
-    const imageGuide: ImageGuideItem[] = Array.isArray(parsed.imageGuide)
-      ? parsed.imageGuide
-          .map((item) => {
-            if (typeof item !== "object" || item === null) return null;
-            const position = (item as { position?: string }).position;
-            const description = (item as { description?: string }).description;
-            const purpose = (item as { purpose?: string }).purpose;
-            const altText = (item as { altText?: string }).altText;
-            if (
-              typeof position === "string" &&
-              typeof description === "string" &&
-              typeof purpose === "string" &&
-              typeof altText === "string"
-            ) {
-              return {
-                position: position.trim(),
-                description: description.trim(),
-                purpose: purpose.trim(),
-                altText: altText.trim(),
-              };
-            }
-            return null;
-          })
-          .filter((v): v is ImageGuideItem => v !== null)
-          .slice(0, 20)
-      : [];
-
     return NextResponse.json({
       subKeywordSuggestions: poolFromRequest,
       selectedSubKeywords: chosenSubKeywords,
       titleCandidates,
       body: bodyText,
-      imageGuide,
       metaDescription: typeof parsed.metaDescription === "string" ? parsed.metaDescription : "",
       hashtags,
       storyReflectionChecklist: parsed.storyReflectionChecklist ?? null,
