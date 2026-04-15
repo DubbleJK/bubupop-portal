@@ -9,13 +9,29 @@ const SEARCHAD_KEYWORDTOOL_URL = "https://api.searchad.naver.com/keywordstool";
 const REQUEST_TIMEOUT_MS = 4500;
 const AI_TIMEOUT_MS = 3000;
 const AI_RETRY_TIMEOUT_MS = 8000;
-const CACHE_TTL_MS = 60 * 1000;
+const BASIC_CACHE_TTL_MS = 3 * 60 * 1000;
+const DETAIL_CACHE_TTL_MS = 5 * 60 * 1000;
+const SUGGEST_CACHE_TTL_MS = 60 * 1000;
+const DEFAULT_SUGGESTIONS = [
+  "스티커 제작",
+  "uv 스티커",
+  "dtf 출력",
+  "배너 제작",
+  "명함 제작",
+  "단체티 인쇄",
+  "작업조끼 인쇄",
+  "키링 제작",
+  "현수막 제작",
+];
+type QueryMode = "basic" | "detail" | "suggest";
+type FetchStatus = "ok" | "missing-key" | "timeout" | "no-data" | "error";
 
 type KeywordResponseCache = {
   expiresAt: number;
   payload: Record<string, unknown>;
 };
 const keywordResponseCache = new Map<string, KeywordResponseCache>();
+const keywordHotMap = new Map<string, number>();
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -226,27 +242,42 @@ async function fetchPopularKeywordsFromAI(keyword: string, count: number): Promi
 export async function POST(request: Request) {
   let keyword: string;
   let debug = false;
-  let includePopular = true;
-  let forcePopularRetry = false;
+  let mode: QueryMode = "basic";
+  let forceRefresh = false;
   try {
     const body = await request.json();
     keyword = String(body?.keyword ?? "").trim();
     debug = Boolean(body?.debug);
-    includePopular = body?.includePopular !== false;
-    forcePopularRetry = Boolean(body?.forcePopularRetry);
+    mode = (body?.mode as QueryMode) ?? "basic";
+    forceRefresh = Boolean(body?.forceRefresh);
   } catch {
     return NextResponse.json({ error: "키워드를 입력해 주세요." }, { status: 400 });
   }
   if (!keyword) {
     return NextResponse.json({ error: "키워드를 입력해 주세요." }, { status: 400 });
   }
-  const cacheKey = keyword.toLowerCase();
+  if (mode === "suggest") {
+    const normalized = keyword.toLowerCase();
+    const hot = Array.from(keywordHotMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([k]) => k);
+    const merged = [...new Set([...hot, ...DEFAULT_SUGGESTIONS])];
+    const suggestions = merged
+      .filter((item) => item.toLowerCase().includes(normalized))
+      .slice(0, 8);
+    return NextResponse.json(
+      { keyword, suggestions },
+      { headers: { "Cache-Control": `public, max-age=${SUGGEST_CACHE_TTL_MS / 1000}` } }
+    );
+  }
+  const cacheKey = `${mode}:${keyword.toLowerCase()}`;
   const cached = keywordResponseCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now() && !forcePopularRetry) {
+  if (cached && cached.expiresAt > Date.now() && !forceRefresh) {
     return NextResponse.json(cached.payload, {
       headers: { "Cache-Control": "public, max-age=30, stale-while-revalidate=30" },
     });
   }
+  keywordHotMap.set(keyword, (keywordHotMap.get(keyword) ?? 0) + 1);
 
   const clientId = process.env.NAVER_CLIENT_ID ?? "";
   const clientSecret = process.env.NAVER_CLIENT_SECRET ?? "";
@@ -262,6 +293,8 @@ export async function POST(request: Request) {
   let mobileTrend: number | null = null;
   let pcMonthlyVolume: string | null = null;
   let mobileMonthlyVolume: string | null = null;
+  let trendStatus: FetchStatus = "no-data";
+  let volumeStatus: FetchStatus = "no-data";
 
   const datalabPromise = hasDatalab
     ? withTimeout(
@@ -308,10 +341,10 @@ export async function POST(request: Request) {
       )
     : Promise.resolve(null);
 
-  const openAiPopularPromise = hasOpenAI && includePopular
+  const openAiPopularPromise = hasOpenAI && mode === "detail"
     ? withTimeout(
         fetchPopularKeywordsFromAI(keyword, 15),
-        forcePopularRetry ? AI_RETRY_TIMEOUT_MS : AI_TIMEOUT_MS
+        forceRefresh ? AI_RETRY_TIMEOUT_MS : AI_TIMEOUT_MS
       )
     : Promise.resolve(null);
 
@@ -324,17 +357,48 @@ export async function POST(request: Request) {
   let debugSearchAdResponse: unknown;
   if (datalabResult) {
     [pcTrend, mobileTrend] = datalabResult;
+    trendStatus = pcTrend != null || mobileTrend != null ? "ok" : "no-data";
+  } else if (!hasDatalab) {
+    trendStatus = "missing-key";
+  } else {
+    trendStatus = "timeout";
   }
   if (searchAdResult) {
     pcMonthlyVolume = searchAdResult.pcMonthlyVolume;
     mobileMonthlyVolume = searchAdResult.mobileMonthlyVolume;
     debugSearchAdResponse = searchAdResult.debugSearchAdResponse;
+    volumeStatus =
+      pcMonthlyVolume != null || mobileMonthlyVolume != null ? "ok" : "no-data";
+  } else if (!hasSearchAd) {
+    volumeStatus = "missing-key";
+  } else {
+    volumeStatus = "timeout";
   }
   const searchAdRelated = searchAdResult?.relatedCandidates ?? [];
   const relatedFallback = searchAdRelated.slice(0, 15);
-  const finalRelatedKeywords = relatedFallback;
+  const finalRelatedKeywords = mode === "detail" ? relatedFallback : [];
   const aiPopularKeywords = openAiPopularResult ?? [];
-  const finalPopularKeywords = aiPopularKeywords;
+  const finalPopularKeywords = mode === "detail" ? aiPopularKeywords : [];
+  const relatedStatus: FetchStatus =
+    mode !== "detail"
+      ? "no-data"
+      : !hasSearchAd
+        ? "missing-key"
+        : searchAdResult == null
+          ? "timeout"
+          : finalRelatedKeywords.length > 0
+            ? "ok"
+            : "no-data";
+  const popularStatus: FetchStatus =
+    mode !== "detail"
+      ? "no-data"
+      : !hasOpenAI
+        ? "missing-key"
+        : openAiPopularResult == null
+          ? "timeout"
+          : finalPopularKeywords.length > 0
+            ? "ok"
+            : "no-data";
 
   const hasMonthlyVolume = hasSearchAd && (pcMonthlyVolume != null || mobileMonthlyVolume != null);
   const volumeNote = hasMonthlyVolume
@@ -360,12 +424,17 @@ export async function POST(request: Request) {
     keysConfigured: { datalab: hasDatalab, openai: hasOpenAI, searchad: hasSearchAd },
     relatedSource: searchAdRelated.length > 0 ? "searchad" : "none",
     popularSource: aiPopularKeywords.length > 0 ? "openai" : "none",
+    mode,
+    trendStatus,
+    volumeStatus,
+    relatedStatus,
+    popularStatus,
   };
   if (debug && debugSearchAdResponse !== undefined) {
     json._debugSearchAdResponse = debugSearchAdResponse;
   }
   keywordResponseCache.set(cacheKey, {
-    expiresAt: Date.now() + CACHE_TTL_MS,
+    expiresAt: Date.now() + (mode === "basic" ? BASIC_CACHE_TTL_MS : DETAIL_CACHE_TTL_MS),
     payload: json,
   });
   return NextResponse.json(json, {
