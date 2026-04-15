@@ -6,6 +6,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? "" });
 
 const DATALAB_URL = "https://openapi.naver.com/v1/datalab/search";
 const SEARCHAD_KEYWORDTOOL_URL = "https://api.searchad.naver.com/keywordstool";
+const NAVER_BLOG_SEARCH_URL = "https://openapi.naver.com/v1/search/blog.json";
 const REQUEST_TIMEOUT_MS = 4500;
 const AI_TIMEOUT_MS = 3000;
 const AI_RETRY_TIMEOUT_MS = 8000;
@@ -250,6 +251,31 @@ async function fetchDatalabTrend(
   return Math.round(avg * 10) / 10;
 }
 
+/** 네이버 블로그 검색 결과 총 문서 수 조회 */
+async function fetchNaverBlogDocumentCount(
+  keyword: string,
+  clientId: string,
+  clientSecret: string
+): Promise<number | null> {
+  const params = new URLSearchParams({
+    query: keyword,
+    display: "1",
+    start: "1",
+    sort: "sim",
+  });
+  const res = await fetch(`${NAVER_BLOG_SEARCH_URL}?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      "X-Naver-Client-Id": clientId,
+      "X-Naver-Client-Secret": clientSecret,
+    },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  if (!res.ok) return null;
+  const data = (await res.json()) as { total?: number };
+  return typeof data.total === "number" ? data.total : null;
+}
+
 /** OpenAI로 인기 키워드 생성 */
 async function fetchPopularKeywordsFromAI(keyword: string, count: number): Promise<string[]> {
   const sys = `당신은 네이버 검색 최적화 전문가입니다.
@@ -327,11 +353,13 @@ export async function POST(request: Request) {
   let mobileTrend: number | null = null;
   let pcMonthlyVolume: string | null = null;
   let mobileMonthlyVolume: string | null = null;
+  let keywordBlogDocCount: number | null = null;
 
   const needTrend = mode === "basic";
   const needVolume = mode === "basic";
   const needRelated = mode === "related";
   const needPopular = mode === "popular";
+  const needBlogDocCount = mode === "basic";
 
   const datalabPromise = hasDatalab && needTrend
     ? withTimeout(
@@ -381,10 +409,15 @@ export async function POST(request: Request) {
       )
     : Promise.resolve(null);
 
-  const [datalabResult, searchAdResult, openAiPopularResult] = await Promise.all([
+  const naverBlogCountPromise = hasDatalab && needBlogDocCount
+    ? withTimeout(fetchNaverBlogDocumentCount(keyword, clientId, clientSecret), REQUEST_TIMEOUT_MS)
+    : Promise.resolve(null);
+
+  const [datalabResult, searchAdResult, openAiPopularResult, naverBlogCountResult] = await Promise.all([
     datalabPromise,
     searchAdPromise,
     openAiPopularPromise,
+    naverBlogCountPromise,
   ]);
 
   if (datalabResult && needTrend) {
@@ -393,6 +426,9 @@ export async function POST(request: Request) {
   if (searchAdResult && needVolume) {
     pcMonthlyVolume = searchAdResult.pcMonthlyVolume;
     mobileMonthlyVolume = searchAdResult.mobileMonthlyVolume;
+  }
+  if (typeof naverBlogCountResult === "number" && needBlogDocCount) {
+    keywordBlogDocCount = naverBlogCountResult;
   }
   const searchAdRelated = needRelated ? searchAdResult?.relatedCandidates ?? [] : [];
   const relatedFallback = searchAdRelated.slice(0, 15);
@@ -444,6 +480,14 @@ export async function POST(request: Request) {
     popularSource: aiPopularKeywords.length > 0 ? "openai" : "none",
     relatedStatus,
     popularStatus,
+    keywordBlogDocCount:
+      mode === "basic" ? keywordBlogDocCount : null,
+    blogDocCountNote:
+      mode !== "basic"
+        ? null
+        : hasDatalab
+          ? "네이버 블로그 검색 API 기준 추정 문서 수입니다."
+          : "블로그 문서 수를 보려면 .env.local에 NAVER_CLIENT_ID, NAVER_CLIENT_SECRET을 추가하세요.",
     keywordScore:
       mode === "basic"
         ? calcKeywordScore({

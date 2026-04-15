@@ -18,6 +18,8 @@ interface KeywordResult {
   relatedStatus?: "ok" | "missing-key" | "timeout" | "no-data" | "error";
   popularStatus?: "ok" | "missing-key" | "timeout" | "no-data" | "error";
   keysConfigured: { datalab: boolean; openai: boolean; searchad?: boolean };
+  keywordBlogDocCount?: number | null;
+  blogDocCountNote?: string | null;
   keywordScore?: {
     total: number;
     grade: "HIGH" | "MEDIUM" | "LOW";
@@ -25,6 +27,28 @@ interface KeywordResult {
     trendMomentum: number;
     volumePower: number;
   } | null;
+}
+
+function getScoreBand(score: number) {
+  if (score >= 70) {
+    return {
+      label: "작성 추천",
+      colorClass: "text-emerald-700",
+      bgClass: "bg-emerald-50",
+    };
+  }
+  if (score >= 40) {
+    return {
+      label: "조건부 추천",
+      colorClass: "text-amber-700",
+      bgClass: "bg-amber-50",
+    };
+  }
+  return {
+    label: "우선순위 낮음",
+    colorClass: "text-rose-700",
+    bgClass: "bg-rose-50",
+  };
 }
 
 function relatedSourceLabel(source?: KeywordResult["relatedSource"]): string {
@@ -262,15 +286,39 @@ export default function KeywordPage() {
             {result.keywordScore && (
               <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
                 <h2 className="text-sm font-semibold text-slate-700 mb-3">콘텐츠 우선순위 점수</h2>
-                <div className="flex items-center justify-between gap-3 rounded-lg bg-emerald-50 px-4 py-3">
-                  <p className="text-sm text-slate-700">
-                    현재 키워드 우선순위:
-                    <span className="ml-2 text-lg font-bold text-emerald-700">
-                      {result.keywordScore.total}점 ({result.keywordScore.grade})
-                    </span>
-                  </p>
-                  <p className="text-xs text-slate-500">높을수록 먼저 작성 추천</p>
-                </div>
+                {(() => {
+                  const score = result.keywordScore.total;
+                  const band = getScoreBand(score);
+                  const needleDeg = -90 + (score / 100) * 180;
+                  return (
+                    <div className={`rounded-xl border p-4 ${band.bgClass}`}>
+                      <div className="mx-auto relative h-40 w-72 overflow-hidden">
+                        <div
+                          className="absolute bottom-0 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full"
+                          style={{
+                            background:
+                              "conic-gradient(from 180deg, #f43f5e 0deg 72deg, #f59e0b 72deg 126deg, #10b981 126deg 180deg, #e2e8f0 180deg 360deg)",
+                          }}
+                        />
+                        <div className="absolute bottom-3 left-1/2 h-56 w-56 -translate-x-1/2 rounded-full bg-white" />
+                        <div
+                          className="absolute bottom-3 left-1/2 h-24 w-1 -translate-x-1/2 origin-bottom rounded-full bg-slate-700"
+                          style={{ transform: `translateX(-50%) rotate(${needleDeg}deg)` }}
+                        />
+                        <div className="absolute bottom-1 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full bg-slate-700" />
+                        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 text-center">
+                          <p className={`text-3xl font-bold ${band.colorClass}`}>{score}점</p>
+                          <p className={`text-sm font-semibold ${band.colorClass}`}>{band.label}</p>
+                        </div>
+                      </div>
+                      <div className="mt-2 grid grid-cols-3 text-[11px] text-center text-slate-600">
+                        <p>0~39 낮음</p>
+                        <p>40~69 조건부</p>
+                        <p>70~100 추천</p>
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-600">
                   <div className="rounded-md bg-slate-50 p-2">
                     <p className="text-slate-500">모바일 비중</p>
@@ -284,6 +332,22 @@ export default function KeywordPage() {
                     <p className="text-slate-500">검색량 파워</p>
                     <p className="font-semibold">{result.keywordScore.volumePower}점</p>
                   </div>
+                </div>
+                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 space-y-1">
+                  <p><span className="font-semibold text-slate-700">모바일 비중</span>: 전체 월간검색량 중 모바일이 차지하는 비율입니다.</p>
+                  <p><span className="font-semibold text-slate-700">트렌드 모멘텀</span>: 최근 1개월 트렌드 상대값(0~100)을 점수로 환산한 값입니다.</p>
+                  <p><span className="font-semibold text-slate-700">검색량 파워</span>: PC+모바일 월간검색량 규모를 로그 기반으로 점수화한 값입니다.</p>
+                </div>
+                <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="text-xs text-slate-500">해당 키워드 네이버 블로그 발행 문서 수(추정)</p>
+                  <p className="mt-1 text-xl font-semibold text-slate-800">
+                    {typeof result.keywordBlogDocCount === "number"
+                      ? `${result.keywordBlogDocCount.toLocaleString()}건`
+                      : "조회 불가"}
+                  </p>
+                  {result.blogDocCountNote && (
+                    <p className="mt-1 text-xs text-slate-400">{result.blogDocCountNote}</p>
+                  )}
                 </div>
               </section>
             )}
