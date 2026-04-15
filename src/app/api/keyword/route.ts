@@ -6,6 +6,27 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? "" });
 
 const DATALAB_URL = "https://openapi.naver.com/v1/datalab/search";
 const SEARCHAD_KEYWORDTOOL_URL = "https://api.searchad.naver.com/keywordstool";
+const REQUEST_TIMEOUT_MS = 4500;
+const AI_TIMEOUT_MS = 6000;
+const CACHE_TTL_MS = 60 * 1000;
+
+type KeywordResponseCache = {
+  expiresAt: number;
+  payload: Record<string, unknown>;
+};
+const keywordResponseCache = new Map<string, KeywordResponseCache>();
+
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), ms);
+    });
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 /** 검색광고 API 서명 생성 (HMAC-SHA256, Base64). 시크릿은 UTF-8 문자열로 사용(네이버 공식: base64 디코딩 안 함). */
 function buildSearchAdSignature(
@@ -44,6 +65,7 @@ async function fetchSearchAdMonthlyVolume(
       "X-Customer": customerId,
       "X-Signature": signature,
     },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (!res.ok) {
     if (process.env.NODE_ENV === "development") {
@@ -137,6 +159,7 @@ async function fetchDatalabTrend(
       "X-Naver-Client-Secret": clientSecret,
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   if (!res.ok) return null;
   const data = (await res.json()) as {
@@ -193,6 +216,13 @@ export async function POST(request: Request) {
   if (!keyword) {
     return NextResponse.json({ error: "키워드를 입력해 주세요." }, { status: 400 });
   }
+  const cacheKey = keyword.toLowerCase();
+  const cached = keywordResponseCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return NextResponse.json(cached.payload, {
+      headers: { "Cache-Control": "public, max-age=30, stale-while-revalidate=30" },
+    });
+  }
 
   const clientId = process.env.NAVER_CLIENT_ID ?? "";
   const clientSecret = process.env.NAVER_CLIENT_SECRET ?? "";
@@ -208,62 +238,85 @@ export async function POST(request: Request) {
   let pcMonthlyVolume: string | null = null;
   let mobileMonthlyVolume: string | null = null;
 
-  if (hasDatalab) {
-    try {
-      const [pc, mo] = await Promise.all([
-        fetchDatalabTrend(keyword, "pc", clientId, clientSecret),
-        fetchDatalabTrend(keyword, "mo", clientId, clientSecret),
-      ]);
-      pcTrend = pc;
-      mobileTrend = mo;
-    } catch {
-      // ignore
-    }
-  }
+  const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
+  const datalabPromise = hasDatalab
+    ? withTimeout(
+        Promise.all([
+          fetchDatalabTrend(keyword, "pc", clientId, clientSecret),
+          fetchDatalabTrend(keyword, "mo", clientId, clientSecret),
+        ]),
+        REQUEST_TIMEOUT_MS
+      )
+    : Promise.resolve(null);
+
+  const searchAdPromise = hasSearchAd
+    ? withTimeout(
+        (async () => {
+          let debugSearchAdResponse: unknown;
+          const noSpace = keyword.replace(/\s/g, "");
+          const firstWord = keyword.trim().split(/\s+/)[0] ?? noSpace;
+          const candidates = noSpace
+            ? [noSpace, firstWord].filter((v, i, a) => a.indexOf(v) === i)
+            : [firstWord];
+
+          for (const hintKeyword of candidates) {
+            if (!hintKeyword) continue;
+            const vol = await fetchSearchAdMonthlyVolume(
+              hintKeyword,
+              customerId,
+              accessLicense,
+              secretKey,
+              debug ? { returnRaw: true } : undefined
+            );
+            if (vol.rawResponse !== undefined) debugSearchAdResponse = vol.rawResponse;
+            if (vol.pcMonthlyVolume != null || vol.mobileMonthlyVolume != null) {
+              return { ...vol, debugSearchAdResponse };
+            }
+          }
+          return {
+            pcMonthlyVolume: null,
+            mobileMonthlyVolume: null,
+            debugSearchAdResponse,
+          };
+        })(),
+        REQUEST_TIMEOUT_MS
+      )
+    : Promise.resolve(null);
+
+  const openAiPromise = hasOpenAI
+    ? withTimeout(
+        (async () => {
+          const result = await fetchKeywordsFromAI(keyword, 15);
+          let related = result.related;
+          let popular = result.popular;
+          if (related.length < 3 || popular.length < 3) {
+            const fallback = await fetchKeywordsFromAI(keyword, 3);
+            if (related.length < 3) related = fallback.related;
+            if (popular.length < 3) popular = fallback.popular;
+          }
+          return { related, popular };
+        })(),
+        AI_TIMEOUT_MS
+      )
+    : Promise.resolve(null);
+
+  const [datalabResult, searchAdResult, openAiResult] = await Promise.all([
+    datalabPromise,
+    searchAdPromise,
+    openAiPromise,
+  ]);
 
   let debugSearchAdResponse: unknown;
-  if (hasSearchAd) {
-    try {
-      const noSpace = keyword.replace(/\s/g, "");
-      const firstWord = keyword.trim().split(/\s+/)[0] ?? noSpace;
-      const candidates = noSpace ? [noSpace, firstWord].filter((v, i, a) => a.indexOf(v) === i) : [firstWord];
-      for (const hintKeyword of candidates) {
-        if (!hintKeyword) continue;
-        const vol = await fetchSearchAdMonthlyVolume(
-          hintKeyword,
-          customerId,
-          accessLicense,
-          secretKey,
-          debug ? { returnRaw: true } : undefined
-        );
-        if (vol.rawResponse !== undefined) debugSearchAdResponse = vol.rawResponse;
-        if (vol.pcMonthlyVolume != null || vol.mobileMonthlyVolume != null) {
-          pcMonthlyVolume = vol.pcMonthlyVolume;
-          mobileMonthlyVolume = vol.mobileMonthlyVolume;
-          break;
-        }
-      }
-    } catch {
-      // ignore
-    }
+  if (datalabResult) {
+    [pcTrend, mobileTrend] = datalabResult;
   }
-
-  const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
-  let relatedKeywords: string[] = [];
-  let popularKeywords: string[] = [];
-
-  if (hasOpenAI) {
-    const result = await fetchKeywordsFromAI(keyword, 15);
-    let related = result.related;
-    let popular = result.popular;
-    if (related.length < 3 || popular.length < 3) {
-      const fallback = await fetchKeywordsFromAI(keyword, 3);
-      if (related.length < 3) related = fallback.related;
-      if (popular.length < 3) popular = fallback.popular;
-    }
-    relatedKeywords = related;
-    popularKeywords = popular;
+  if (searchAdResult) {
+    pcMonthlyVolume = searchAdResult.pcMonthlyVolume;
+    mobileMonthlyVolume = searchAdResult.mobileMonthlyVolume;
+    debugSearchAdResponse = searchAdResult.debugSearchAdResponse;
   }
+  const relatedKeywords = openAiResult?.related ?? [];
+  const popularKeywords = openAiResult?.popular ?? [];
 
   const hasMonthlyVolume = hasSearchAd && (pcMonthlyVolume != null || mobileMonthlyVolume != null);
   const volumeNote = hasMonthlyVolume
@@ -291,5 +344,11 @@ export async function POST(request: Request) {
   if (debug && debugSearchAdResponse !== undefined) {
     json._debugSearchAdResponse = debugSearchAdResponse;
   }
-  return NextResponse.json(json);
+  keywordResponseCache.set(cacheKey, {
+    expiresAt: Date.now() + CACHE_TTL_MS,
+    payload: json,
+  });
+  return NextResponse.json(json, {
+    headers: { "Cache-Control": "public, max-age=30, stale-while-revalidate=30" },
+  });
 }
