@@ -15,12 +15,19 @@ interface KeywordResult {
   volumeNote?: string;
   relatedKeywords: string[];
   popularKeywords: string[];
-  keywordSource?: "searchad-only" | "none";
+  relatedSource?: "searchad" | "none";
+  popularSource?: "openai" | "searchad-fallback" | "none";
   keysConfigured: { datalab: boolean; openai: boolean; searchad?: boolean };
 }
 
-function keywordSourceLabel(source?: KeywordResult["keywordSource"]): string {
-  if (source === "searchad-only") return "출처: 네이버 검색광고 데이터";
+function relatedSourceLabel(source?: KeywordResult["relatedSource"]): string {
+  if (source === "searchad") return "출처: 네이버 검색광고 데이터";
+  return "출처: 없음";
+}
+
+function popularSourceLabel(source?: KeywordResult["popularSource"]): string {
+  if (source === "openai") return "출처: OpenAI";
+  if (source === "searchad-fallback") return "출처: 네이버 검색광고 데이터(폴백)";
   return "출처: 없음";
 }
 
@@ -170,7 +177,7 @@ export default function KeywordPage() {
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-slate-700">연관 키워드 (최대 15개)</h2>
                 <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
-                  {keywordSourceLabel(result.keywordSource)}
+                  {relatedSourceLabel(result.relatedSource)}
                 </span>
               </div>
               {result.relatedKeywords.length > 0 ? (
@@ -200,10 +207,10 @@ export default function KeywordPage() {
             <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-slate-700">
-                  인기 키워드 (블로그 주 키워드로 쓰면 방문자 증가 기대, 최대 15개)
+                  AI가 생각하는 추천키워드 (최대 15개)
                 </h2>
                 <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
-                  {keywordSourceLabel(result.keywordSource)}
+                  {popularSourceLabel(result.popularSource)}
                 </span>
               </div>
               {result.popularKeywords.length > 0 ? (
@@ -223,9 +230,9 @@ export default function KeywordPage() {
                 </ul>
               ) : (
                 <p className="text-sm text-slate-500">
-                  {result.keysConfigured.searchad
-                    ? "인기 키워드를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요."
-                    : "네이버 검색광고 API 키가 없어 인기 키워드를 조회하지 못했습니다."}
+                  {result.keysConfigured.openai
+                    ? "AI 추천 키워드를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요."
+                    : "OPENAI_API_KEY가 없어 AI 추천 키워드를 생성하지 못했습니다."}
                 </p>
               )}
             </section>
