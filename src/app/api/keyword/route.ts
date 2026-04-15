@@ -253,14 +253,16 @@ export async function POST(request: Request) {
   let popularKeywords: string[] = [];
 
   if (hasOpenAI) {
-    let result = await fetchKeywordsFromAI(keyword, 15);
-    if (result.related.length < 3 || result.popular.length < 3) {
+    const result = await fetchKeywordsFromAI(keyword, 15);
+    let related = result.related;
+    let popular = result.popular;
+    if (related.length < 3 || popular.length < 3) {
       const fallback = await fetchKeywordsFromAI(keyword, 3);
-      if (result.related.length < 3) result.related = fallback.related;
-      if (result.popular.length < 3) result.popular = fallback.popular;
+      if (related.length < 3) related = fallback.related;
+      if (popular.length < 3) popular = fallback.popular;
     }
-    relatedKeywords = result.related;
-    popularKeywords = result.popular;
+    relatedKeywords = related;
+    popularKeywords = popular;
   }
 
   const hasMonthlyVolume = hasSearchAd && (pcMonthlyVolume != null || mobileMonthlyVolume != null);

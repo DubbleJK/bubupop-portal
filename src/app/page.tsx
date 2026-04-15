@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 /** 계산기 아이콘 */
 function IconCalculator({ className }: { className?: string }) {
@@ -63,12 +64,13 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center p-4">
       <div className="mb-6 flex flex-col items-center">
         {/* 로고: bubucalculate-app/public/logo.png 에 넣어 주세요 */}
-        <img
+        <Image
           src="/logo.png"
           alt="BUBUPOP DESIGN & PRINT"
           width={330}
           height={180}
           className="object-contain"
+          priority
         />
         <p className="text-slate-600 text-sm mt-2">사무실용 도구 모음</p>
       </div>
