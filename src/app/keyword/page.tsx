@@ -17,7 +17,7 @@ interface KeywordResult {
   popularKeywords: string[];
   relatedSource?: "searchad" | "none";
   popularSource?: "openai" | "none";
-  mode?: "basic" | "detail";
+  mode?: "basic" | "related" | "popular";
   trendStatus?: "ok" | "missing-key" | "timeout" | "no-data" | "error";
   volumeStatus?: "ok" | "missing-key" | "timeout" | "no-data" | "error";
   relatedStatus?: "ok" | "missing-key" | "timeout" | "no-data" | "error";
@@ -38,8 +38,8 @@ function popularSourceLabel(source?: KeywordResult["popularSource"]): string {
 export default function KeywordPage() {
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [popularRetryLoading, setPopularRetryLoading] = useState(false);
-  const [detailLoading, setDetailLoading] = useState(false);
+  const [relatedLoading, setRelatedLoading] = useState(false);
+  const [popularLoading, setPopularLoading] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,10 +48,8 @@ export default function KeywordPage() {
   const fetchKeyword = async (
     k: string,
     options?: {
-      forcePopularRetry?: boolean;
       preserveResult?: boolean;
-      includePopular?: boolean;
-      mode?: "basic" | "detail";
+      mode?: "basic" | "related" | "popular";
       forceRefresh?: boolean;
     }
   ) => {
@@ -62,10 +60,10 @@ export default function KeywordPage() {
     if (!options?.preserveResult) {
       setResult(null);
     }
-    if (options?.forcePopularRetry) {
-      setPopularRetryLoading(true);
-    } else if (options?.mode === "detail") {
-      setDetailLoading(true);
+    if (options?.mode === "related") {
+      setRelatedLoading(true);
+    } else if (options?.mode === "popular") {
+      setPopularLoading(true);
     } else {
       setLoading(true);
     }
@@ -76,7 +74,6 @@ export default function KeywordPage() {
         body: JSON.stringify({
           keyword: trimmed,
           forceRefresh: Boolean(options?.forceRefresh),
-          includePopular: options?.includePopular ?? false,
           mode: options?.mode ?? "basic",
         }),
       });
@@ -85,7 +82,7 @@ export default function KeywordPage() {
         setError(data.error || "조회에 실패했습니다.");
         return;
       }
-      if (options?.mode === "detail") {
+      if (options?.mode === "related" || options?.mode === "popular") {
         setResult((prev) => (prev ? { ...prev, ...data } : data));
       } else {
         setResult(data);
@@ -93,10 +90,10 @@ export default function KeywordPage() {
     } catch {
       setError("네트워크 오류가 났습니다. 다시 시도해 주세요.");
     } finally {
-      if (options?.forcePopularRetry) {
-        setPopularRetryLoading(false);
-      } else if (options?.mode === "detail") {
-        setDetailLoading(false);
+      if (options?.mode === "related") {
+        setRelatedLoading(false);
+      } else if (options?.mode === "popular") {
+        setPopularLoading(false);
       } else {
         setLoading(false);
       }
@@ -105,8 +102,7 @@ export default function KeywordPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // 초기 조회는 속도 우선: 무거운 AI 인기키워드 생성은 생략
-    fetchKeyword(keyword, { includePopular: false, mode: "basic" });
+    fetchKeyword(keyword, { mode: "basic" });
   };
 
   const fetchSuggestions = async (q: string) => {
@@ -236,27 +232,6 @@ export default function KeywordPage() {
             </section>
 
             <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-slate-700">상세 키워드</h2>
-                <button
-                  type="button"
-                  onClick={() =>
-                    fetchKeyword(result.keyword, {
-                      mode: "detail",
-                      includePopular: true,
-                      preserveResult: true,
-                      forceRefresh: false,
-                    })
-                  }
-                  disabled={detailLoading}
-                  className="inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50"
-                >
-                  {detailLoading ? "상세 키워드 불러오는 중…" : "연관/AI 키워드 불러오기"}
-                </button>
-              </div>
-            </section>
-
-            <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
               <h2 className="text-sm font-semibold text-slate-700 mb-3">검색 트렌드 (최근 1개월)</h2>
               {result.keysConfigured.datalab ? (
                 <div className="grid grid-cols-2 gap-4">
@@ -287,9 +262,25 @@ export default function KeywordPage() {
             <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-slate-700">연관 키워드 (최대 15개)</h2>
-                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
-                  {relatedSourceLabel(result.relatedSource)}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
+                    {relatedSourceLabel(result.relatedSource)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      fetchKeyword(result.keyword, {
+                        mode: "related",
+                        preserveResult: true,
+                        forceRefresh: true,
+                      })
+                    }
+                    disabled={relatedLoading}
+                    className="inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {relatedLoading ? "연관키워드 불러오는 중…" : "연관키워드 불러오기"}
+                  </button>
+                </div>
               </div>
               {result.relatedKeywords.length > 0 ? (
                 <ul className="flex flex-wrap gap-2">
@@ -322,9 +313,25 @@ export default function KeywordPage() {
                 <h2 className="text-sm font-semibold text-slate-700">
                   AI가 생각하는 추천키워드 (최대 15개)
                 </h2>
-                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
-                  {popularSourceLabel(result.popularSource)}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
+                    {popularSourceLabel(result.popularSource)}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={popularLoading}
+                    onClick={() =>
+                      fetchKeyword(result.keyword, {
+                        mode: "popular",
+                        preserveResult: true,
+                        forceRefresh: true,
+                      })
+                    }
+                    className="inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {popularLoading ? "AI키워드 불러오는 중…" : "AI키워드 불러오기"}
+                  </button>
+                </div>
               </div>
               {result.popularKeywords.length > 0 ? (
                 <ul className="flex flex-wrap gap-2">
@@ -347,27 +354,9 @@ export default function KeywordPage() {
                     {result.popularStatus === "missing-key"
                       ? "OPENAI_API_KEY가 없어 AI 추천 키워드를 생성하지 못했습니다."
                       : result.popularStatus === "timeout"
-                        ? "AI 응답이 지연되었습니다. 아래 버튼으로 다시 불러올 수 있습니다."
-                        : "AI 추천 키워드를 아직 불러오지 않았습니다. 위 버튼 또는 아래 버튼으로 실행해 주세요."}
+                        ? "AI 응답이 지연되었습니다. 위 버튼으로 다시 불러올 수 있습니다."
+                        : "AI 추천 키워드를 아직 불러오지 않았습니다. 위 버튼으로 실행해 주세요."}
                   </p>
-                  {result.keysConfigured.openai && (
-                    <button
-                      type="button"
-                      disabled={popularRetryLoading}
-                      onClick={() =>
-                        fetchKeyword(result.keyword, {
-                          forcePopularRetry: true,
-                          preserveResult: true,
-                          includePopular: true,
-                          mode: "detail",
-                          forceRefresh: true,
-                        })
-                      }
-                      className="inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50"
-                    >
-                      {popularRetryLoading ? "인기키워드 불러오는 중…" : "인기키워드 불러오기"}
-                    </button>
-                  )}
                 </div>
               )}
             </section>

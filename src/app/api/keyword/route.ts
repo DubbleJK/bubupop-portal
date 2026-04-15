@@ -23,7 +23,7 @@ const DEFAULT_SUGGESTIONS = [
   "키링 제작",
   "현수막 제작",
 ];
-type QueryMode = "basic" | "detail" | "suggest";
+type QueryMode = "basic" | "related" | "popular" | "suggest";
 type FetchStatus = "ok" | "missing-key" | "timeout" | "no-data" | "error";
 
 type KeywordResponseCache = {
@@ -296,7 +296,12 @@ export async function POST(request: Request) {
   let trendStatus: FetchStatus = "no-data";
   let volumeStatus: FetchStatus = "no-data";
 
-  const datalabPromise = hasDatalab
+  const needTrend = mode === "basic";
+  const needVolume = mode === "basic";
+  const needRelated = mode === "related";
+  const needPopular = mode === "popular";
+
+  const datalabPromise = hasDatalab && needTrend
     ? withTimeout(
         Promise.all([
           fetchDatalabTrend(keyword, "pc", clientId, clientSecret),
@@ -306,7 +311,7 @@ export async function POST(request: Request) {
       )
     : Promise.resolve(null);
 
-  const searchAdPromise = hasSearchAd
+  const searchAdPromise = hasSearchAd && (needVolume || needRelated)
     ? withTimeout(
         (async () => {
           let debugSearchAdResponse: unknown;
@@ -341,7 +346,7 @@ export async function POST(request: Request) {
       )
     : Promise.resolve(null);
 
-  const openAiPopularPromise = hasOpenAI && mode === "detail"
+  const openAiPopularPromise = hasOpenAI && needPopular
     ? withTimeout(
         fetchPopularKeywordsFromAI(keyword, 15),
         forceRefresh ? AI_RETRY_TIMEOUT_MS : AI_TIMEOUT_MS
@@ -355,32 +360,38 @@ export async function POST(request: Request) {
   ]);
 
   let debugSearchAdResponse: unknown;
-  if (datalabResult) {
+  if (datalabResult && needTrend) {
     [pcTrend, mobileTrend] = datalabResult;
     trendStatus = pcTrend != null || mobileTrend != null ? "ok" : "no-data";
+  } else if (!needTrend) {
+    trendStatus = "no-data";
   } else if (!hasDatalab) {
     trendStatus = "missing-key";
   } else {
     trendStatus = "timeout";
   }
-  if (searchAdResult) {
+  if (searchAdResult && needVolume) {
     pcMonthlyVolume = searchAdResult.pcMonthlyVolume;
     mobileMonthlyVolume = searchAdResult.mobileMonthlyVolume;
-    debugSearchAdResponse = searchAdResult.debugSearchAdResponse;
     volumeStatus =
       pcMonthlyVolume != null || mobileMonthlyVolume != null ? "ok" : "no-data";
+  } else if (!needVolume) {
+    volumeStatus = "no-data";
   } else if (!hasSearchAd) {
     volumeStatus = "missing-key";
   } else {
     volumeStatus = "timeout";
   }
-  const searchAdRelated = searchAdResult?.relatedCandidates ?? [];
+  if (searchAdResult) {
+    debugSearchAdResponse = searchAdResult.debugSearchAdResponse;
+  }
+  const searchAdRelated = needRelated ? searchAdResult?.relatedCandidates ?? [] : [];
   const relatedFallback = searchAdRelated.slice(0, 15);
-  const finalRelatedKeywords = mode === "detail" ? relatedFallback : [];
-  const aiPopularKeywords = openAiPopularResult ?? [];
-  const finalPopularKeywords = mode === "detail" ? aiPopularKeywords : [];
+  const finalRelatedKeywords = needRelated ? relatedFallback : [];
+  const aiPopularKeywords = needPopular ? openAiPopularResult ?? [] : [];
+  const finalPopularKeywords = needPopular ? aiPopularKeywords : [];
   const relatedStatus: FetchStatus =
-    mode !== "detail"
+    !needRelated
       ? "no-data"
       : !hasSearchAd
         ? "missing-key"
@@ -390,7 +401,7 @@ export async function POST(request: Request) {
             ? "ok"
             : "no-data";
   const popularStatus: FetchStatus =
-    mode !== "detail"
+    !needPopular
       ? "no-data"
       : !hasOpenAI
         ? "missing-key"
