@@ -7,8 +7,6 @@ interface KeywordResult {
   keyword: string;
   pcTrend: number | null;
   mobileTrend: number | null;
-  pcVolume: number | null;
-  mobileVolume: number | null;
   pcMonthlyVolume: string | null;
   mobileMonthlyVolume: string | null;
   trendNote: string;
@@ -17,12 +15,16 @@ interface KeywordResult {
   popularKeywords: string[];
   relatedSource?: "searchad" | "none";
   popularSource?: "openai" | "none";
-  mode?: "basic" | "related" | "popular";
-  trendStatus?: "ok" | "missing-key" | "timeout" | "no-data" | "error";
-  volumeStatus?: "ok" | "missing-key" | "timeout" | "no-data" | "error";
   relatedStatus?: "ok" | "missing-key" | "timeout" | "no-data" | "error";
   popularStatus?: "ok" | "missing-key" | "timeout" | "no-data" | "error";
   keysConfigured: { datalab: boolean; openai: boolean; searchad?: boolean };
+  keywordScore?: {
+    total: number;
+    grade: "HIGH" | "MEDIUM" | "LOW";
+    mobileRatio: number;
+    trendMomentum: number;
+    volumePower: number;
+  } | null;
 }
 
 function relatedSourceLabel(source?: KeywordResult["relatedSource"]): string {
@@ -82,8 +84,34 @@ export default function KeywordPage() {
         setError(data.error || "조회에 실패했습니다.");
         return;
       }
-      if (options?.mode === "related" || options?.mode === "popular") {
-        setResult((prev) => (prev ? { ...prev, ...data } : data));
+      if (options?.mode === "related") {
+        setResult((prev) =>
+          prev
+            ? {
+                ...prev,
+                keyword: data.keyword ?? prev.keyword,
+                relatedKeywords: Array.isArray(data.relatedKeywords)
+                  ? data.relatedKeywords
+                  : prev.relatedKeywords,
+                relatedSource: data.relatedSource ?? prev.relatedSource,
+                relatedStatus: data.relatedStatus ?? prev.relatedStatus,
+              }
+            : data
+        );
+      } else if (options?.mode === "popular") {
+        setResult((prev) =>
+          prev
+            ? {
+                ...prev,
+                keyword: data.keyword ?? prev.keyword,
+                popularKeywords: Array.isArray(data.popularKeywords)
+                  ? data.popularKeywords
+                  : prev.popularKeywords,
+                popularSource: data.popularSource ?? prev.popularSource,
+                popularStatus: data.popularStatus ?? prev.popularStatus,
+              }
+            : data
+        );
       } else {
         setResult(data);
       }
@@ -231,6 +259,35 @@ export default function KeywordPage() {
               )}
             </section>
 
+            {result.keywordScore && (
+              <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
+                <h2 className="text-sm font-semibold text-slate-700 mb-3">콘텐츠 우선순위 점수</h2>
+                <div className="flex items-center justify-between gap-3 rounded-lg bg-emerald-50 px-4 py-3">
+                  <p className="text-sm text-slate-700">
+                    현재 키워드 우선순위:
+                    <span className="ml-2 text-lg font-bold text-emerald-700">
+                      {result.keywordScore.total}점 ({result.keywordScore.grade})
+                    </span>
+                  </p>
+                  <p className="text-xs text-slate-500">높을수록 먼저 작성 추천</p>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-slate-600">
+                  <div className="rounded-md bg-slate-50 p-2">
+                    <p className="text-slate-500">모바일 비중</p>
+                    <p className="font-semibold">{result.keywordScore.mobileRatio}%</p>
+                  </div>
+                  <div className="rounded-md bg-slate-50 p-2">
+                    <p className="text-slate-500">트렌드 모멘텀</p>
+                    <p className="font-semibold">{result.keywordScore.trendMomentum}점</p>
+                  </div>
+                  <div className="rounded-md bg-slate-50 p-2">
+                    <p className="text-slate-500">검색량 파워</p>
+                    <p className="font-semibold">{result.keywordScore.volumePower}점</p>
+                  </div>
+                </div>
+              </section>
+            )}
+
             <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
               <h2 className="text-sm font-semibold text-slate-700 mb-3">검색 트렌드 (최근 1개월)</h2>
               {result.keysConfigured.datalab ? (
@@ -272,7 +329,6 @@ export default function KeywordPage() {
                       fetchKeyword(result.keyword, {
                         mode: "related",
                         preserveResult: true,
-                        forceRefresh: true,
                       })
                     }
                     disabled={relatedLoading}
@@ -324,7 +380,6 @@ export default function KeywordPage() {
                       fetchKeyword(result.keyword, {
                         mode: "popular",
                         preserveResult: true,
-                        forceRefresh: true,
                       })
                     }
                     className="inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50"

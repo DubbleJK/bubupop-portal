@@ -33,6 +33,48 @@ type KeywordResponseCache = {
 const keywordResponseCache = new Map<string, KeywordResponseCache>();
 const keywordHotMap = new Map<string, number>();
 
+function parseVolumeToNumber(value: string | null): number {
+  if (!value) return 0;
+  const trimmed = String(value).trim();
+  if (trimmed === "<10") return 9;
+  const numeric = Number(trimmed.replace(/,/g, ""));
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : 0;
+}
+
+function calcKeywordScore(input: {
+  pcTrend: number | null;
+  mobileTrend: number | null;
+  pcMonthlyVolume: string | null;
+  mobileMonthlyVolume: string | null;
+}) {
+  const pcVolumeNum = parseVolumeToNumber(input.pcMonthlyVolume);
+  const mobileVolumeNum = parseVolumeToNumber(input.mobileMonthlyVolume);
+  const totalVolume = pcVolumeNum + mobileVolumeNum;
+  const mobileRatio = totalVolume > 0 ? (mobileVolumeNum / totalVolume) * 100 : 0;
+  const trendBase =
+    input.pcTrend != null && input.mobileTrend != null
+      ? (input.pcTrend + input.mobileTrend) / 2
+      : input.pcTrend ?? input.mobileTrend ?? 0;
+
+  const mobileRatioScore = Math.min(40, Math.max(0, Math.round((mobileRatio / 100) * 40)));
+  const trendMomentumScore = Math.min(40, Math.max(0, Math.round((trendBase / 100) * 40)));
+  const volumePowerScore =
+    totalVolume > 0
+      ? Math.min(20, Math.max(0, Math.round((Math.log10(totalVolume + 1) / Math.log10(100000 + 1)) * 20)))
+      : 0;
+
+  const total = Math.min(100, mobileRatioScore + trendMomentumScore + volumePowerScore);
+  const grade = total >= 70 ? "HIGH" : total >= 40 ? "MEDIUM" : "LOW";
+
+  return {
+    total,
+    grade,
+    mobileRatio: Number(mobileRatio.toFixed(1)),
+    trendMomentum: trendMomentumScore,
+    volumePower: volumePowerScore,
+  };
+}
+
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -62,13 +104,11 @@ async function fetchSearchAdMonthlyVolume(
   hintKeyword: string,
   customerId: string,
   accessLicense: string,
-  secretKeyBase64: string,
-  options?: { returnRaw?: boolean }
+  secretKeyBase64: string
 ): Promise<{
   pcMonthlyVolume: string | null;
   mobileMonthlyVolume: string | null;
   relatedCandidates: string[];
-  rawResponse?: unknown;
 }> {
   const timestamp = String(Date.now());
   const method = "GET";
@@ -98,7 +138,6 @@ async function fetchSearchAdMonthlyVolume(
       pcMonthlyVolume: null,
       mobileMonthlyVolume: null,
       relatedCandidates: [],
-      ...(options?.returnRaw ? { rawResponse: { ok: false, status: res.status } } : {}),
     };
   }
   let data: unknown;
@@ -109,7 +148,6 @@ async function fetchSearchAdMonthlyVolume(
       pcMonthlyVolume: null,
       mobileMonthlyVolume: null,
       relatedCandidates: [],
-      ...(options?.returnRaw ? { rawResponse: null } : {}),
     };
   }
   const raw = data as Record<string, unknown>;
@@ -157,7 +195,6 @@ async function fetchSearchAdMonthlyVolume(
       pcMonthlyVolume: null,
       mobileMonthlyVolume: null,
       relatedCandidates: [],
-      ...(options?.returnRaw ? { rawResponse: data } : {}),
     };
   }
   const relatedCandidates = list
@@ -173,7 +210,6 @@ async function fetchSearchAdMonthlyVolume(
     pcMonthlyVolume: toStr(getPc(chosen) as string | number),
     mobileMonthlyVolume: toStr(getMobile(chosen) as string | number),
     relatedCandidates,
-    ...(options?.returnRaw ? { rawResponse: data } : {}),
   };
 }
 
@@ -241,13 +277,11 @@ async function fetchPopularKeywordsFromAI(keyword: string, count: number): Promi
 
 export async function POST(request: Request) {
   let keyword: string;
-  let debug = false;
   let mode: QueryMode = "basic";
   let forceRefresh = false;
   try {
     const body = await request.json();
     keyword = String(body?.keyword ?? "").trim();
-    debug = Boolean(body?.debug);
     mode = (body?.mode as QueryMode) ?? "basic";
     forceRefresh = Boolean(body?.forceRefresh);
   } catch {
@@ -293,8 +327,6 @@ export async function POST(request: Request) {
   let mobileTrend: number | null = null;
   let pcMonthlyVolume: string | null = null;
   let mobileMonthlyVolume: string | null = null;
-  let trendStatus: FetchStatus = "no-data";
-  let volumeStatus: FetchStatus = "no-data";
 
   const needTrend = mode === "basic";
   const needVolume = mode === "basic";
@@ -314,7 +346,6 @@ export async function POST(request: Request) {
   const searchAdPromise = hasSearchAd && (needVolume || needRelated)
     ? withTimeout(
         (async () => {
-          let debugSearchAdResponse: unknown;
           const noSpace = keyword.replace(/\s/g, "");
           const firstWord = keyword.trim().split(/\s+/)[0] ?? noSpace;
           const candidates = noSpace
@@ -327,19 +358,16 @@ export async function POST(request: Request) {
               hintKeyword,
               customerId,
               accessLicense,
-              secretKey,
-              debug ? { returnRaw: true } : undefined
+              secretKey
             );
-            if (vol.rawResponse !== undefined) debugSearchAdResponse = vol.rawResponse;
             if (vol.pcMonthlyVolume != null || vol.mobileMonthlyVolume != null) {
-              return { ...vol, debugSearchAdResponse };
+              return vol;
             }
           }
           return {
             pcMonthlyVolume: null,
             mobileMonthlyVolume: null,
             relatedCandidates: [],
-            debugSearchAdResponse,
           };
         })(),
         REQUEST_TIMEOUT_MS
@@ -359,31 +387,12 @@ export async function POST(request: Request) {
     openAiPopularPromise,
   ]);
 
-  let debugSearchAdResponse: unknown;
   if (datalabResult && needTrend) {
     [pcTrend, mobileTrend] = datalabResult;
-    trendStatus = pcTrend != null || mobileTrend != null ? "ok" : "no-data";
-  } else if (!needTrend) {
-    trendStatus = "no-data";
-  } else if (!hasDatalab) {
-    trendStatus = "missing-key";
-  } else {
-    trendStatus = "timeout";
   }
   if (searchAdResult && needVolume) {
     pcMonthlyVolume = searchAdResult.pcMonthlyVolume;
     mobileMonthlyVolume = searchAdResult.mobileMonthlyVolume;
-    volumeStatus =
-      pcMonthlyVolume != null || mobileMonthlyVolume != null ? "ok" : "no-data";
-  } else if (!needVolume) {
-    volumeStatus = "no-data";
-  } else if (!hasSearchAd) {
-    volumeStatus = "missing-key";
-  } else {
-    volumeStatus = "timeout";
-  }
-  if (searchAdResult) {
-    debugSearchAdResponse = searchAdResult.debugSearchAdResponse;
   }
   const searchAdRelated = needRelated ? searchAdResult?.relatedCandidates ?? [] : [];
   const relatedFallback = searchAdRelated.slice(0, 15);
@@ -422,8 +431,6 @@ export async function POST(request: Request) {
     keyword,
     pcTrend: pcTrend ?? null,
     mobileTrend: mobileTrend ?? null,
-    pcVolume: pcTrend != null ? pcTrend : null,
-    mobileVolume: mobileTrend != null ? mobileTrend : null,
     pcMonthlyVolume: pcMonthlyVolume ?? null,
     mobileMonthlyVolume: mobileMonthlyVolume ?? null,
     trendNote: hasDatalab
@@ -435,15 +442,18 @@ export async function POST(request: Request) {
     keysConfigured: { datalab: hasDatalab, openai: hasOpenAI, searchad: hasSearchAd },
     relatedSource: searchAdRelated.length > 0 ? "searchad" : "none",
     popularSource: aiPopularKeywords.length > 0 ? "openai" : "none",
-    mode,
-    trendStatus,
-    volumeStatus,
     relatedStatus,
     popularStatus,
+    keywordScore:
+      mode === "basic"
+        ? calcKeywordScore({
+            pcTrend,
+            mobileTrend,
+            pcMonthlyVolume,
+            mobileMonthlyVolume,
+          })
+        : null,
   };
-  if (debug && debugSearchAdResponse !== undefined) {
-    json._debugSearchAdResponse = debugSearchAdResponse;
-  }
   keywordResponseCache.set(cacheKey, {
     expiresAt: Date.now() + (mode === "basic" ? BASIC_CACHE_TTL_MS : DETAIL_CACHE_TTL_MS),
     payload: json,
