@@ -8,6 +8,7 @@ const DATALAB_URL = "https://openapi.naver.com/v1/datalab/search";
 const SEARCHAD_KEYWORDTOOL_URL = "https://api.searchad.naver.com/keywordstool";
 const REQUEST_TIMEOUT_MS = 4500;
 const AI_TIMEOUT_MS = 3000;
+const AI_RETRY_TIMEOUT_MS = 8000;
 const CACHE_TTL_MS = 60 * 1000;
 
 type KeywordResponseCache = {
@@ -225,10 +226,14 @@ async function fetchPopularKeywordsFromAI(keyword: string, count: number): Promi
 export async function POST(request: Request) {
   let keyword: string;
   let debug = false;
+  let includePopular = true;
+  let forcePopularRetry = false;
   try {
     const body = await request.json();
     keyword = String(body?.keyword ?? "").trim();
     debug = Boolean(body?.debug);
+    includePopular = body?.includePopular !== false;
+    forcePopularRetry = Boolean(body?.forcePopularRetry);
   } catch {
     return NextResponse.json({ error: "키워드를 입력해 주세요." }, { status: 400 });
   }
@@ -237,7 +242,7 @@ export async function POST(request: Request) {
   }
   const cacheKey = keyword.toLowerCase();
   const cached = keywordResponseCache.get(cacheKey);
-  if (cached && cached.expiresAt > Date.now()) {
+  if (cached && cached.expiresAt > Date.now() && !forcePopularRetry) {
     return NextResponse.json(cached.payload, {
       headers: { "Cache-Control": "public, max-age=30, stale-while-revalidate=30" },
     });
@@ -303,8 +308,11 @@ export async function POST(request: Request) {
       )
     : Promise.resolve(null);
 
-  const openAiPopularPromise = hasOpenAI
-    ? withTimeout(fetchPopularKeywordsFromAI(keyword, 15), AI_TIMEOUT_MS)
+  const openAiPopularPromise = hasOpenAI && includePopular
+    ? withTimeout(
+        fetchPopularKeywordsFromAI(keyword, 15),
+        forcePopularRetry ? AI_RETRY_TIMEOUT_MS : AI_TIMEOUT_MS
+      )
     : Promise.resolve(null);
 
   const [datalabResult, searchAdResult, openAiPopularResult] = await Promise.all([

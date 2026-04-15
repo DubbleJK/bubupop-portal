@@ -33,21 +33,38 @@ function popularSourceLabel(source?: KeywordResult["popularSource"]): string {
 export default function KeywordPage() {
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [popularRetryLoading, setPopularRetryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<KeywordResult | null>(null);
 
-  const fetchKeyword = async (k: string) => {
+  const fetchKeyword = async (
+    k: string,
+    options?: {
+      forcePopularRetry?: boolean;
+      preserveResult?: boolean;
+    }
+  ) => {
     const trimmed = k.trim();
     if (!trimmed) return;
     setKeyword(trimmed);
     setError(null);
-    setResult(null);
-    setLoading(true);
+    if (!options?.preserveResult) {
+      setResult(null);
+    }
+    if (options?.forcePopularRetry) {
+      setPopularRetryLoading(true);
+    } else {
+      setLoading(true);
+    }
     try {
       const res = await fetch("/api/keyword", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword: trimmed }),
+        body: JSON.stringify({
+          keyword: trimmed,
+          forcePopularRetry: Boolean(options?.forcePopularRetry),
+          includePopular: true,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -58,7 +75,11 @@ export default function KeywordPage() {
     } catch {
       setError("네트워크 오류가 났습니다. 다시 시도해 주세요.");
     } finally {
-      setLoading(false);
+      if (options?.forcePopularRetry) {
+        setPopularRetryLoading(false);
+      } else {
+        setLoading(false);
+      }
     }
   };
 
@@ -228,11 +249,28 @@ export default function KeywordPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-slate-500">
-                  {result.keysConfigured.openai
-                    ? "AI 추천 키워드를 아직 가져오지 못했습니다. 다시 조회해 주세요."
-                    : "OPENAI_API_KEY가 없어 AI 추천 키워드를 생성하지 못했습니다."}
-                </p>
+                <div className="space-y-2">
+                  <p className="text-sm text-slate-500">
+                    {result.keysConfigured.openai
+                      ? "AI 추천 키워드를 아직 가져오지 못했습니다. 아래 버튼으로 다시 불러올 수 있습니다."
+                      : "OPENAI_API_KEY가 없어 AI 추천 키워드를 생성하지 못했습니다."}
+                  </p>
+                  {result.keysConfigured.openai && (
+                    <button
+                      type="button"
+                      disabled={popularRetryLoading}
+                      onClick={() =>
+                        fetchKeyword(result.keyword, {
+                          forcePopularRetry: true,
+                          preserveResult: true,
+                        })
+                      }
+                      className="inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      {popularRetryLoading ? "인기키워드 불러오는 중…" : "인기키워드 불러오기"}
+                    </button>
+                  )}
+                </div>
               )}
             </section>
           </div>
