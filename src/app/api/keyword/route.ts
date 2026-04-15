@@ -1,13 +1,9 @@
 import { createHmac } from "crypto";
 import { NextResponse } from "next/server";
-import OpenAI from "openai";
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? "" });
 
 const DATALAB_URL = "https://openapi.naver.com/v1/datalab/search";
 const SEARCHAD_KEYWORDTOOL_URL = "https://api.searchad.naver.com/keywordstool";
 const REQUEST_TIMEOUT_MS = 4500;
-const AI_TIMEOUT_MS = 12000;
 const CACHE_TTL_MS = 60 * 1000;
 
 type KeywordResponseCache = {
@@ -197,52 +193,6 @@ async function fetchDatalabTrend(
   return Math.round(avg * 10) / 10;
 }
 
-/** OpenAI로 연관키워드 15개 + 인기키워드 15개 생성. 실패 시 3개씩 요청 */
-async function fetchKeywordsFromAI(
-  keyword: string,
-  count: number
-): Promise<{ related: string[]; popular: string[] }> {
-  const sys = `당신은 네이버 블로그·검색 SEO 전문가입니다.
-사업 분야: 인쇄/디자인/스티커/DTF/UV/배너/실사출력/의류/명함.
-주어진 키워드에 대해 JSON만 출력하세요. 다른 설명 없이 JSON만.
-형식: {"related": ["연관1","연관2",...], "popular": ["인기1","인기2",...]}
-- related: 검색 시 함께 찾는 연관 키워드 (블로그 제목·본문에 쓸 수 있는).
-- popular: 블로그 주 키워드로 썼을 때 방문자가 늘 수 있는 인기 검색어.`;
-  const user = `키워드: "${keyword}"
-연관키워드 ${count}개, 인기키워드 ${count}개를 각각 추천해 주세요. JSON만 출력.`;
-
-  try {
-    const comp = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "system", content: sys }, { role: "user", content: user }],
-      temperature: 0.5,
-    });
-    const text = comp.choices[0]?.message?.content?.trim() ?? "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON");
-    const parsed = JSON.parse(jsonMatch[0]) as { related?: string[]; popular?: string[] };
-    const related = Array.isArray(parsed.related) ? parsed.related.slice(0, count) : [];
-    const popular = Array.isArray(parsed.popular) ? parsed.popular.slice(0, count) : [];
-    return { related, popular };
-  } catch {
-    return { related: [], popular: [] };
-  }
-}
-
-async function fetchKeywordsFromAIWithRetry(
-  keyword: string
-): Promise<{ related: string[]; popular: string[] }> {
-  const firstTry = await withTimeout(fetchKeywordsFromAI(keyword, 15), AI_TIMEOUT_MS);
-  if (firstTry && firstTry.related.length >= 3 && firstTry.popular.length >= 3) {
-    return firstTry;
-  }
-
-  const secondTry = await withTimeout(fetchKeywordsFromAI(keyword, 8), 7000);
-  const related = secondTry?.related ?? firstTry?.related ?? [];
-  const popular = secondTry?.popular ?? firstTry?.popular ?? [];
-  return { related, popular };
-}
-
 export async function POST(request: Request) {
   let keyword: string;
   let debug = false;
@@ -278,7 +228,6 @@ export async function POST(request: Request) {
   let pcMonthlyVolume: string | null = null;
   let mobileMonthlyVolume: string | null = null;
 
-  const hasOpenAI = Boolean(process.env.OPENAI_API_KEY);
   const datalabPromise = hasDatalab
     ? withTimeout(
         Promise.all([
@@ -324,14 +273,9 @@ export async function POST(request: Request) {
       )
     : Promise.resolve(null);
 
-  const openAiPromise = hasOpenAI
-    ? fetchKeywordsFromAIWithRetry(keyword)
-    : Promise.resolve(null);
-
-  const [datalabResult, searchAdResult, openAiResult] = await Promise.all([
+  const [datalabResult, searchAdResult] = await Promise.all([
     datalabPromise,
     searchAdPromise,
-    openAiPromise,
   ]);
 
   let debugSearchAdResponse: unknown;
@@ -343,13 +287,11 @@ export async function POST(request: Request) {
     mobileMonthlyVolume = searchAdResult.mobileMonthlyVolume;
     debugSearchAdResponse = searchAdResult.debugSearchAdResponse;
   }
-  const relatedKeywords = openAiResult?.related ?? [];
-  const popularKeywords = openAiResult?.popular ?? [];
   const searchAdRelated = searchAdResult?.relatedCandidates ?? [];
   const relatedFallback = searchAdRelated.slice(0, 15);
   const popularFallback = searchAdRelated.slice(0, 15);
-  const finalRelatedKeywords = relatedKeywords.length > 0 ? relatedKeywords : relatedFallback;
-  const finalPopularKeywords = popularKeywords.length > 0 ? popularKeywords : popularFallback;
+  const finalRelatedKeywords = relatedFallback;
+  const finalPopularKeywords = popularFallback;
 
   const hasMonthlyVolume = hasSearchAd && (pcMonthlyVolume != null || mobileMonthlyVolume != null);
   const volumeNote = hasMonthlyVolume
@@ -372,13 +314,8 @@ export async function POST(request: Request) {
     volumeNote,
     relatedKeywords: finalRelatedKeywords,
     popularKeywords: finalPopularKeywords,
-    keysConfigured: { datalab: hasDatalab, openai: hasOpenAI, searchad: hasSearchAd },
-    keywordSource:
-      relatedKeywords.length > 0 || popularKeywords.length > 0
-        ? "openai"
-        : searchAdRelated.length > 0
-          ? "searchad-fallback"
-          : "none",
+    keysConfigured: { datalab: hasDatalab, openai: false, searchad: hasSearchAd },
+    keywordSource: searchAdRelated.length > 0 ? "searchad-only" : "none",
   };
   if (debug && debugSearchAdResponse !== undefined) {
     json._debugSearchAdResponse = debugSearchAdResponse;

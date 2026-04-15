@@ -15,13 +15,12 @@ interface KeywordResult {
   volumeNote?: string;
   relatedKeywords: string[];
   popularKeywords: string[];
-  keywordSource?: "openai" | "searchad-fallback" | "none";
+  keywordSource?: "searchad-only" | "none";
   keysConfigured: { datalab: boolean; openai: boolean; searchad?: boolean };
 }
 
 function keywordSourceLabel(source?: KeywordResult["keywordSource"]): string {
-  if (source === "openai") return "출처: OpenAI 생성";
-  if (source === "searchad-fallback") return "출처: 네이버 검색광고 연관어(폴백)";
+  if (source === "searchad-only") return "출처: 네이버 검색광고 데이터";
   return "출처: 없음";
 }
 
@@ -191,9 +190,9 @@ export default function KeywordPage() {
                 </ul>
               ) : (
                 <p className="text-sm text-slate-500">
-                  {result.keysConfigured.openai
-                    ? "연관 키워드를 가져오지 못했습니다."
-                    : "OpenAI API 키가 없어 연관 키워드를 생성하지 못했습니다. .env.local에 OPENAI_API_KEY를 추가하세요."}
+                  {result.keysConfigured.searchad
+                    ? "연관 키워드를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요."
+                    : "네이버 검색광고 API 키가 없어 연관 키워드를 조회하지 못했습니다."}
                 </p>
               )}
             </section>
@@ -224,9 +223,9 @@ export default function KeywordPage() {
                 </ul>
               ) : (
                 <p className="text-sm text-slate-500">
-                  {result.keysConfigured.openai
-                    ? "인기 키워드를 가져오지 못했습니다."
-                    : "OpenAI API 키가 없어 인기 키워드를 생성하지 못했습니다."}
+                  {result.keysConfigured.searchad
+                    ? "인기 키워드를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요."
+                    : "네이버 검색광고 API 키가 없어 인기 키워드를 조회하지 못했습니다."}
                 </p>
               )}
             </section>
