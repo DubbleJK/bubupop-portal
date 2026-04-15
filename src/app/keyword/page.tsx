@@ -16,7 +16,7 @@ interface KeywordResult {
   relatedKeywords: string[];
   popularKeywords: string[];
   relatedSource?: "searchad" | "none";
-  popularSource?: "openai" | "searchad-fallback" | "none";
+  popularSource?: "openai" | "none";
   keysConfigured: { datalab: boolean; openai: boolean; searchad?: boolean };
 }
 
@@ -27,7 +27,6 @@ function relatedSourceLabel(source?: KeywordResult["relatedSource"]): string {
 
 function popularSourceLabel(source?: KeywordResult["popularSource"]): string {
   if (source === "openai") return "출처: OpenAI";
-  if (source === "searchad-fallback") return "출처: 네이버 검색광고 데이터(폴백)";
   return "출처: 없음";
 }
 
@@ -231,7 +230,7 @@ export default function KeywordPage() {
               ) : (
                 <p className="text-sm text-slate-500">
                   {result.keysConfigured.openai
-                    ? "AI 추천 키워드를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요."
+                    ? "AI 추천 키워드를 아직 가져오지 못했습니다. 다시 조회해 주세요."
                     : "OPENAI_API_KEY가 없어 AI 추천 키워드를 생성하지 못했습니다."}
                 </p>
               )}

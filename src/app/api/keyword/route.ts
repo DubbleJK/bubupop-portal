@@ -7,7 +7,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? "" });
 const DATALAB_URL = "https://openapi.naver.com/v1/datalab/search";
 const SEARCHAD_KEYWORDTOOL_URL = "https://api.searchad.naver.com/keywordstool";
 const REQUEST_TIMEOUT_MS = 4500;
-const AI_TIMEOUT_MS = 9000;
+const AI_TIMEOUT_MS = 3000;
 const CACHE_TTL_MS = 60 * 1000;
 
 type KeywordResponseCache = {
@@ -324,10 +324,9 @@ export async function POST(request: Request) {
   }
   const searchAdRelated = searchAdResult?.relatedCandidates ?? [];
   const relatedFallback = searchAdRelated.slice(0, 15);
-  const popularFallback = searchAdRelated.slice(0, 15);
   const finalRelatedKeywords = relatedFallback;
   const aiPopularKeywords = openAiPopularResult ?? [];
-  const finalPopularKeywords = aiPopularKeywords.length > 0 ? aiPopularKeywords : popularFallback;
+  const finalPopularKeywords = aiPopularKeywords;
 
   const hasMonthlyVolume = hasSearchAd && (pcMonthlyVolume != null || mobileMonthlyVolume != null);
   const volumeNote = hasMonthlyVolume
@@ -352,12 +351,7 @@ export async function POST(request: Request) {
     popularKeywords: finalPopularKeywords,
     keysConfigured: { datalab: hasDatalab, openai: hasOpenAI, searchad: hasSearchAd },
     relatedSource: searchAdRelated.length > 0 ? "searchad" : "none",
-    popularSource:
-      aiPopularKeywords.length > 0
-        ? "openai"
-        : popularFallback.length > 0
-          ? "searchad-fallback"
-          : "none",
+    popularSource: aiPopularKeywords.length > 0 ? "openai" : "none",
   };
   if (debug && debugSearchAdResponse !== undefined) {
     json._debugSearchAdResponse = debugSearchAdResponse;
