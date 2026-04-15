@@ -15,7 +15,14 @@ interface KeywordResult {
   volumeNote?: string;
   relatedKeywords: string[];
   popularKeywords: string[];
+  keywordSource?: "openai" | "searchad-fallback" | "none";
   keysConfigured: { datalab: boolean; openai: boolean; searchad?: boolean };
+}
+
+function keywordSourceLabel(source?: KeywordResult["keywordSource"]): string {
+  if (source === "openai") return "출처: OpenAI 생성";
+  if (source === "searchad-fallback") return "출처: 네이버 검색광고 연관어(폴백)";
+  return "출처: 없음";
 }
 
 export default function KeywordPage() {
@@ -161,7 +168,12 @@ export default function KeywordPage() {
             </section>
 
             <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-700 mb-3">연관 키워드 (최대 15개)</h2>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-slate-700">연관 키워드 (최대 15개)</h2>
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
+                  {keywordSourceLabel(result.keywordSource)}
+                </span>
+              </div>
               {result.relatedKeywords.length > 0 ? (
                 <ul className="flex flex-wrap gap-2">
                   {result.relatedKeywords.map((k, i) => (
@@ -187,9 +199,14 @@ export default function KeywordPage() {
             </section>
 
             <section className="bg-white rounded-xl border border-slate-200 p-4 md:p-6 shadow-sm">
-              <h2 className="text-sm font-semibold text-slate-700 mb-3">
-                인기 키워드 (블로그 주 키워드로 쓰면 방문자 증가 기대, 최대 15개)
-              </h2>
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-slate-700">
+                  인기 키워드 (블로그 주 키워드로 쓰면 방문자 증가 기대, 최대 15개)
+                </h2>
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
+                  {keywordSourceLabel(result.keywordSource)}
+                </span>
+              </div>
               {result.popularKeywords.length > 0 ? (
                 <ul className="flex flex-wrap gap-2">
                   {result.popularKeywords.map((k, i) => (
