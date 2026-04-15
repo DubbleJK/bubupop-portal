@@ -42,6 +42,7 @@ export default function KeywordPage() {
     options?: {
       forcePopularRetry?: boolean;
       preserveResult?: boolean;
+      includePopular?: boolean;
     }
   ) => {
     const trimmed = k.trim();
@@ -63,7 +64,7 @@ export default function KeywordPage() {
         body: JSON.stringify({
           keyword: trimmed,
           forcePopularRetry: Boolean(options?.forcePopularRetry),
-          includePopular: true,
+          includePopular: options?.includePopular ?? false,
         }),
       });
       const data = await res.json();
@@ -85,7 +86,8 @@ export default function KeywordPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchKeyword(keyword);
+    // 초기 조회는 속도 우선: 무거운 AI 인기키워드 생성은 생략
+    fetchKeyword(keyword, { includePopular: false });
   };
 
   return (
@@ -263,6 +265,7 @@ export default function KeywordPage() {
                         fetchKeyword(result.keyword, {
                           forcePopularRetry: true,
                           preserveResult: true,
+                          includePopular: true,
                         })
                       }
                       className="inline-flex items-center justify-center px-3 py-2 rounded-lg text-sm font-medium bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50"
