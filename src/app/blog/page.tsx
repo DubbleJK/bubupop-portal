@@ -1,8 +1,7 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { LENGTH_OPTIONS, TONE_OPTIONS } from "@/lib/blog/templates";
 
 interface BlogOutput {
@@ -66,7 +65,6 @@ function buildStoryPayload(parts: {
 }
 
 function BlogPageContent() {
-  const searchParams = useSearchParams();
   const [mainKeyword, setMainKeyword] = useState("");
   const [subKeywordPool, setSubKeywordPool] = useState<string[]>([]);
   const [selectedSubKeywords, setSelectedSubKeywords] = useState<string[]>([]);
@@ -90,9 +88,10 @@ function BlogPageContent() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const q = searchParams.get("keyword");
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search).get("keyword");
     if (q?.trim()) setMainKeyword(q.trim());
-  }, [searchParams]);
+  }, []);
 
   const toggleSubKeyword = (k: string) => {
     setSelectedSubKeywords((prev) => {
@@ -641,9 +640,5 @@ function BlogPageContent() {
 }
 
 export default function BlogPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-100 flex items-center justify-center text-slate-500">로딩 중...</div>}>
-      <BlogPageContent />
-    </Suspense>
-  );
+  return <BlogPageContent />;
 }
