@@ -289,32 +289,35 @@ export default function KeywordPage() {
                 {(() => {
                   const score = result.keywordScore.total;
                   const band = getScoreBand(score);
-                  const needleDeg = -90 + (score / 100) * 180;
+                  const gaugeValue = Math.max(0, Math.min(100, score));
+                  const gaugeDegree = Math.round((gaugeValue / 100) * 180);
                   return (
-                    <div className={`rounded-xl border p-4 ${band.bgClass}`}>
+                    <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm">
+                      <div className="mb-3 flex items-center justify-between">
+                        <p className="text-xs font-semibold tracking-wide text-slate-500">CONTENT PRIORITY SCORE</p>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${band.bgClass} ${band.colorClass}`}>
+                          {band.label}
+                        </span>
+                      </div>
                       <div className="mx-auto relative h-40 w-72 overflow-hidden">
                         <div
                           className="absolute bottom-0 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full"
                           style={{
                             background:
-                              "conic-gradient(from 180deg, #f43f5e 0deg 72deg, #f59e0b 72deg 126deg, #10b981 126deg 180deg, #e2e8f0 180deg 360deg)",
+                              `conic-gradient(from 180deg, #f43f5e 0deg 72deg, #f59e0b 72deg 126deg, #10b981 126deg ${gaugeDegree}deg, #e2e8f0 ${gaugeDegree}deg 180deg, #e2e8f0 180deg 360deg)`,
                           }}
                         />
-                        <div className="absolute bottom-3 left-1/2 h-56 w-56 -translate-x-1/2 rounded-full bg-white" />
-                        <div
-                          className="absolute bottom-3 left-1/2 h-24 w-1 -translate-x-1/2 origin-bottom rounded-full bg-slate-700"
-                          style={{ transform: `translateX(-50%) rotate(${needleDeg}deg)` }}
-                        />
-                        <div className="absolute bottom-1 left-1/2 h-3 w-3 -translate-x-1/2 rounded-full bg-slate-700" />
+                        <div className="absolute bottom-3 left-1/2 h-56 w-56 -translate-x-1/2 rounded-full bg-white shadow-inner" />
                         <div className="absolute bottom-10 left-1/2 -translate-x-1/2 text-center">
-                          <p className={`text-3xl font-bold ${band.colorClass}`}>{score}점</p>
-                          <p className={`text-sm font-semibold ${band.colorClass}`}>{band.label}</p>
+                          <p className="text-xs font-medium text-slate-500">현재 점수</p>
+                          <p className={`text-4xl font-extrabold leading-none ${band.colorClass}`}>{score}</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-700">/ 100점</p>
                         </div>
                       </div>
-                      <div className="mt-2 grid grid-cols-3 text-[11px] text-center text-slate-600">
-                        <p>0~39 낮음</p>
-                        <p>40~69 조건부</p>
-                        <p>70~100 추천</p>
+                      <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] font-semibold text-center">
+                        <p className="rounded-md bg-rose-50 py-1 text-rose-700">0~39 낮음</p>
+                        <p className="rounded-md bg-amber-50 py-1 text-amber-700">40~69 조건부</p>
+                        <p className="rounded-md bg-emerald-50 py-1 text-emerald-700">70~100 추천</p>
                       </div>
                     </div>
                   );
