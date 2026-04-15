@@ -7,7 +7,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? "" });
 const DATALAB_URL = "https://openapi.naver.com/v1/datalab/search";
 const SEARCHAD_KEYWORDTOOL_URL = "https://api.searchad.naver.com/keywordstool";
 const REQUEST_TIMEOUT_MS = 4500;
-const AI_TIMEOUT_MS = 6000;
+const AI_TIMEOUT_MS = 12000;
 const CACHE_TTL_MS = 60 * 1000;
 
 type KeywordResponseCache = {
@@ -47,7 +47,12 @@ async function fetchSearchAdMonthlyVolume(
   accessLicense: string,
   secretKeyBase64: string,
   options?: { returnRaw?: boolean }
-): Promise<{ pcMonthlyVolume: string | null; mobileMonthlyVolume: string | null; rawResponse?: unknown }> {
+): Promise<{
+  pcMonthlyVolume: string | null;
+  mobileMonthlyVolume: string | null;
+  relatedCandidates: string[];
+  rawResponse?: unknown;
+}> {
   const timestamp = String(Date.now());
   const method = "GET";
   const uri = "/keywordstool";
@@ -72,13 +77,23 @@ async function fetchSearchAdMonthlyVolume(
       const text = await res.text();
       console.warn("[keyword] searchad non-OK:", res.status, text.slice(0, 300));
     }
-    return { pcMonthlyVolume: null, mobileMonthlyVolume: null, ...(options?.returnRaw ? { rawResponse: { ok: false, status: res.status } } : {}) };
+    return {
+      pcMonthlyVolume: null,
+      mobileMonthlyVolume: null,
+      relatedCandidates: [],
+      ...(options?.returnRaw ? { rawResponse: { ok: false, status: res.status } } : {}),
+    };
   }
   let data: unknown;
   try {
     data = await res.json();
   } catch {
-    return { pcMonthlyVolume: null, mobileMonthlyVolume: null, ...(options?.returnRaw ? { rawResponse: null } : {}) };
+    return {
+      pcMonthlyVolume: null,
+      mobileMonthlyVolume: null,
+      relatedCandidates: [],
+      ...(options?.returnRaw ? { rawResponse: null } : {}),
+    };
   }
   const raw = data as Record<string, unknown>;
   type Item = Record<string, unknown>;
@@ -124,12 +139,23 @@ async function fetchSearchAdMonthlyVolume(
     return {
       pcMonthlyVolume: null,
       mobileMonthlyVolume: null,
+      relatedCandidates: [],
       ...(options?.returnRaw ? { rawResponse: data } : {}),
     };
   }
+  const relatedCandidates = list
+    .map((it) => {
+      const value = toStr((it.relKeyword ?? it.rel_keyword ?? it.keyword) as string);
+      return value ?? "";
+    })
+    .filter(Boolean)
+    .filter((v, i, a) => a.indexOf(v) === i)
+    .slice(0, 20);
+
   return {
     pcMonthlyVolume: toStr(getPc(chosen) as string | number),
     mobileMonthlyVolume: toStr(getMobile(chosen) as string | number),
+    relatedCandidates,
     ...(options?.returnRaw ? { rawResponse: data } : {}),
   };
 }
@@ -201,6 +227,20 @@ async function fetchKeywordsFromAI(
   } catch {
     return { related: [], popular: [] };
   }
+}
+
+async function fetchKeywordsFromAIWithRetry(
+  keyword: string
+): Promise<{ related: string[]; popular: string[] }> {
+  const firstTry = await withTimeout(fetchKeywordsFromAI(keyword, 15), AI_TIMEOUT_MS);
+  if (firstTry && firstTry.related.length >= 3 && firstTry.popular.length >= 3) {
+    return firstTry;
+  }
+
+  const secondTry = await withTimeout(fetchKeywordsFromAI(keyword, 8), 7000);
+  const related = secondTry?.related ?? firstTry?.related ?? [];
+  const popular = secondTry?.popular ?? firstTry?.popular ?? [];
+  return { related, popular };
 }
 
 export async function POST(request: Request) {
@@ -276,6 +316,7 @@ export async function POST(request: Request) {
           return {
             pcMonthlyVolume: null,
             mobileMonthlyVolume: null,
+            relatedCandidates: [],
             debugSearchAdResponse,
           };
         })(),
@@ -284,20 +325,7 @@ export async function POST(request: Request) {
     : Promise.resolve(null);
 
   const openAiPromise = hasOpenAI
-    ? withTimeout(
-        (async () => {
-          const result = await fetchKeywordsFromAI(keyword, 15);
-          let related = result.related;
-          let popular = result.popular;
-          if (related.length < 3 || popular.length < 3) {
-            const fallback = await fetchKeywordsFromAI(keyword, 3);
-            if (related.length < 3) related = fallback.related;
-            if (popular.length < 3) popular = fallback.popular;
-          }
-          return { related, popular };
-        })(),
-        AI_TIMEOUT_MS
-      )
+    ? fetchKeywordsFromAIWithRetry(keyword)
     : Promise.resolve(null);
 
   const [datalabResult, searchAdResult, openAiResult] = await Promise.all([
@@ -317,6 +345,11 @@ export async function POST(request: Request) {
   }
   const relatedKeywords = openAiResult?.related ?? [];
   const popularKeywords = openAiResult?.popular ?? [];
+  const searchAdRelated = searchAdResult?.relatedCandidates ?? [];
+  const relatedFallback = searchAdRelated.slice(0, 15);
+  const popularFallback = searchAdRelated.slice(0, 15);
+  const finalRelatedKeywords = relatedKeywords.length > 0 ? relatedKeywords : relatedFallback;
+  const finalPopularKeywords = popularKeywords.length > 0 ? popularKeywords : popularFallback;
 
   const hasMonthlyVolume = hasSearchAd && (pcMonthlyVolume != null || mobileMonthlyVolume != null);
   const volumeNote = hasMonthlyVolume
@@ -337,9 +370,15 @@ export async function POST(request: Request) {
       ? "트렌드는 최근 1개월 구간의 상대값(0~100)입니다. 네이버 데이터랩 기준."
       : "네이버 API 키가 없어 트렌드를 조회하지 못했습니다. .env.local에 NAVER_CLIENT_ID, NAVER_CLIENT_SECRET을 추가하세요.",
     volumeNote,
-    relatedKeywords,
-    popularKeywords,
+    relatedKeywords: finalRelatedKeywords,
+    popularKeywords: finalPopularKeywords,
     keysConfigured: { datalab: hasDatalab, openai: hasOpenAI, searchad: hasSearchAd },
+    keywordSource:
+      relatedKeywords.length > 0 || popularKeywords.length > 0
+        ? "openai"
+        : searchAdRelated.length > 0
+          ? "searchad-fallback"
+          : "none",
   };
   if (debug && debugSearchAdResponse !== undefined) {
     json._debugSearchAdResponse = debugSearchAdResponse;
